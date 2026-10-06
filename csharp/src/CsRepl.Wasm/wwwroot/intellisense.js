@@ -25,7 +25,8 @@ export function registerIntellisense(monaco, { call, ready, onStats, assemblies,
       const res = await timed('rcompletion', () => completeR(text, pos, { nuget, assemblies }));
       if (!res || model.getValue() !== text) return { suggestions: [] };
       const retrigger = { id: 'editor.action.triggerSuggest', title: '' };
-      return { suggestions: res.items.map((i) => {
+      return { incomplete: res.context.kind === 'package',   // package names are searched on nuget.org: ask again as the text grows
+        suggestions: res.items.map((i) => {
         const a = model.getPositionAt(i.start);
         return { label: i.label, kind: RK[i.kind] ?? K.Text, insertText: i.insertText, filterText: i.label, sortText: i.sortText, detail: i.detail,
           range: new monaco.Range(a.lineNumber, a.column, position.lineNumber, position.column),
