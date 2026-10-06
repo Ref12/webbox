@@ -24,7 +24,8 @@ let S = null;                 // the open pull request (null on the landing page
 let hl = null;                // lazily imported highlighter
 let charW = 7.6;
 const defaultView = () => store.get('view', 'one') === 'all' ? 'all' : 'one';
-const ui = { mode: store.get('mode', 'inline'), full: false };
+const modeKey = () => PHONE() ? 'mode-phone' : 'mode';   // a phone defaults to inline whatever the desktop chose
+const ui = { mode: store.get(modeKey(), 'inline'), full: false };
 
 // ---------------------------------------------------------------- banner, rate, dialogs
 function banner(html) { const b = $('#banner'); b.innerHTML = html || ''; b.hidden = !html; }
@@ -101,7 +102,7 @@ function syncHash() {
 async function route() {
   const { ref, tab, params } = parseRoute(location.hash);
   closePopovers();
-  if (!ref) { S = null; return landing(params); }
+  if (!ref) { S = null; document.body.classList.remove('has-pr', 'drawer', 'phone-panel'); return landing(params); }
   if (S && S.key === ref.owner + '/' + ref.repo + '#' + ref.number) {
     S.tab = tab; S.hashSet = null;
     if (params.m) ui.mode = params.m === 'split' ? 'split' : 'inline';
@@ -141,7 +142,7 @@ document.addEventListener('click', e => { const b = e.target.closest('#banner [d
 
 // ---------------------------------------------------------------- loading a pull request
 async function openPr(ref, tab, params) {
-  banner('');
+  banner(''); document.body.classList.remove('has-pr', 'drawer', 'phone-panel');
   $('#main').innerHTML = '<div class="empty">Loading ' + esc(ref.owner + '/' + ref.repo + '#' + ref.number) + '…</div>';
   const gh = new GitHub({ token: getToken(), onRate: showRate });
   const s = S = {
@@ -164,6 +165,7 @@ async function openPr(ref, tab, params) {
     gh.mergeBase(ref, pr.base.sha, pr.head.sha).then(sha => { if (sha) s.mergeBase = sha; }).catch(() => {}).then(() => { if (S === s) { s.mbReady = true; if (s.gen === 0) applyRange(params.c || '', true); } });
     loadComments(s);
     renderPage();
+    if (PHONE() && tab === 'files' && !params.f) document.body.classList.add('drawer');   // a phone starts on the file list, unless the URL names a file
     $('#diff') && ($('#diff').dataset.state = 'loading');
   } catch (e) { if (S === s) { $('#main').innerHTML = '<div class="empty">Could not open this pull request.</div>'; showError(e); } }
 }
@@ -543,14 +545,18 @@ function renderPage() {
   const pr = s.pr;
   const state = pr.merged ? 'merged' : pr.draft ? 'draft' : pr.state;
   const tabs = ['files', 'overview', 'commits'];
-  $('#main').innerHTML = `<div id="prhead"><h1>${esc(pr.title)} <span class="muted">#${pr.number}</span></h1>
+  document.body.classList.add('has-pr');
+  $('#main').innerHTML = pbarHtml() + `<div id="prhead"><h1>${esc(pr.title)} <span class="muted">#${pr.number}</span></h1>
     <div class="meta"><span class="badge ${state}">${state[0].toUpperCase() + state.slice(1)}</span>
       <span>${esc(pr.user.login)} wants to merge <span class="branch">${esc(pr.head.label || pr.head.ref)}</span> into <span class="branch">${esc(pr.base.ref)}</span></span>
       ${externalLink(pr.html_url, 'Open on GitHub ↗')}</div>
     <nav class="tabs">${tabs.map(t => `<a href="${toRoute(s.ref, { c: s.cparam, m: ui.mode === 'split' ? 'split' : '' }, t)}" class="${s.tab === t ? 'on' : ''}" data-tab="${t}">${t[0].toUpperCase() + t.slice(1)}${t === 'files' ? ' ' + (s.prFiles.length) : t === 'commits' ? ' ' + s.commits.length : ''}</a>`).join('')}</nav></div>
     <div id="page"></div>`;
-  if (s.tab === 'overview') return renderOverview();
-  if (s.tab === 'commits') return renderCommits();
+  if (s.tab !== 'files') {
+    $('#main').insertAdjacentHTML('beforeend', drawerHtml(false));
+    wireDrawer(); updateChrome();
+    return s.tab === 'overview' ? renderOverview() : renderCommits();
+  }
   $('#page').outerHTML = `<div id="toolbar">
       <button id="picker-btn" aria-haspopup="listbox"></button>
       <input id="filter" type="search" placeholder="Filter files (/)" aria-label="Filter files" autocomplete="off" value="${esc(s.filter)}">
@@ -565,9 +571,9 @@ function renderPage() {
       <button id="cm-btn" title="All comment threads">💬 <span id="cm-n"></span></button>
       <button id="rv-btn" title="Post your pending comments as a review, or approve / request changes" hidden>Finish review</button>
       <button id="help-btn" class="icon hide-phone" title="Keyboard (?)">?</button></div>
-    <div id="body"><aside id="tree" aria-label="Changed files"><div id="tspacer" style="position:relative"></div></aside><div id="scrim"></div>
+    <div id="body">${drawerHtml(true)}<div id="scrim"></div>
       <section id="diff" aria-label="Changes"><div id="stick"></div><div id="spacer"><div id="win"></div></div></section><aside id="cpanel" aria-label="Comments" hidden></aside></div>`;
-  wireFiles();
+  wireFiles(); wireDrawer();
   S.vw = $('#diff').clientWidth;
   updateToolbar();
   refreshTree();
@@ -575,9 +581,66 @@ function renderPage() {
   relayout(false);
 }
 
+// ---- phone chrome: one compact bar above the file, everything else in the drawer (hidden by CSS on desktop)
+const TREE_SVG = '<svg class="tree-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.5h4l1.2 1.5h4.3v3.5h-9.5z"/><path d="M5 9.5v8.5M5 12.5h3.5M5 18h3.5"/><rect x="9" y="11" width="6.5" height="3" rx=".6"/><rect x="9" y="16.5" width="6.5" height="3" rx=".6"/></svg>';
+function pbarHtml() {
+  return '<div id="pbar"><button id="pbar-menu" class="icon" title="Files and options (t)" aria-label="Files and options">' + TREE_SVG + '</button>' +
+    '<span id="pbar-name"><bdi></bdi></span>' +
+    '<button id="pbar-prev" class="icon" title="Previous file (k)" aria-label="Previous file">‹</button><button id="pbar-next" class="icon" title="Next file (j)" aria-label="Next file">›</button></div>';
+}
+function drawerHtml(withTree) {
+  const s = S, pr = s.pr, state = pr.merged ? 'merged' : pr.draft ? 'draft' : pr.state;
+  const tabs = ['files', 'overview', 'commits'];
+  return '<aside id="drawer" aria-label="Pull request, files and options"><div id="dtop">' +
+    '<div class="dpr"><div class="dtitle"><b>' + esc(pr.title) + '</b> <span class="muted">#' + pr.number + '</span></div>' +
+    '<div class="meta"><span class="badge ' + state + '">' + state[0].toUpperCase() + state.slice(1) + '</span><span>' + esc(pr.user.login) + '</span><span class="branch">' + esc(pr.base.ref) + '</span> ← <span class="branch">' + esc(pr.head.label || pr.head.ref) + '</span></div>' +
+    '<details id="d-details"><summary>Details</summary><div class="md desc">' + (pr.body ? mdLite(pr.body) : '<span class="muted">No description provided.</span>') + '</div></details></div>' +
+    '<nav class="dtabs">' + tabs.map(t => '<a href="' + toRoute(s.ref, { c: s.cparam, m: ui.mode === 'split' ? 'split' : '' }, t) + '" class="' + (s.tab === t ? 'on' : '') + '" data-dtab="' + t + '">' + t[0].toUpperCase() + t.slice(1) + (t === 'files' ? ' ' + s.prFiles.length : t === 'commits' ? ' ' + s.commits.length : '') + '</a>').join('') + '</nav>' +
+    (withTree ? '<div class="dsec"><input id="dfilter" type="search" placeholder="Filter files" aria-label="Filter files" autocomplete="off" value="' + esc(s.filter) + '"> <span id="d-count" class="muted"></span></div>' : '') +
+    '</div>' + (withTree ? '<div id="tree" aria-label="Changed files"><div id="tspacer" style="position:relative"></div></div>' : '<div class="dgrow"></div>') +
+    '<details id="dbottom" class="dopts"><summary>View, comments, settings</summary>' +
+    (withTree ? '<div class="dsec"><span class="seg" role="group" aria-label="Diff layout"><button id="d-inline">Inline</button><button id="d-split">Side-by-side</button></span></div>' +
+    '<label class="dsec"><input type="checkbox" id="d-stack"> All files stacked</label><label class="dsec"><input type="checkbox" id="d-full"> Full files (not just changes)</label>' +
+    '<div class="dsec"><button id="d-picker" aria-haspopup="listbox"></button> <button id="d-cm">💬 Comments <span id="d-cmn"></span></button> <button id="d-rv" hidden>Review</button></div>' : '') +
+    '<div class="dsec">' + externalLink(pr.html_url, 'Open on GitHub ↗') + '</div>' +
+    '<div class="dsec"><button id="d-settings">⚙ Settings</button> ' + (auth.token ? '<span class="muted">' + esc(auth.user ? auth.user.login : 'token') + '</span> <button id="d-out">Sign out</button>' : '<button id="d-in" class="on">Add a GitHub token</button>') + '</div>' +
+    '</details></aside>';
+}
+function wireDrawer() {
+  const close = () => document.body.classList.remove('drawer');
+  const on = (id, fn) => { const e = $(id); if (e) e.onclick = fn; };
+  on('#pbar-menu', () => document.body.classList.toggle('drawer'));
+  on('#pbar-prev', () => stepFile(-1)); on('#pbar-next', () => stepFile(1));
+  on('#d-inline', () => setMode('inline')); on('#d-split', () => setMode('split'));
+  on('#d-picker', () => openPicker($('#d-picker')));
+  on('#d-cm', () => { close(); $('#cm-btn').click(); });
+  on('#d-rv', () => { close(); reviewDialog(); });
+  on('#d-settings', () => { close(); settingsDialog(); });
+  on('#d-in', () => { close(); signIn(); }); on('#d-out', () => { close(); signOut(); });
+  const st = $('#d-stack'); if (st) st.onchange = e => { setView(e.target.checked ? 'all' : 'one'); close(); };
+  const fu = $('#d-full'); if (fu) fu.onchange = () => { $('#full-btn').click(); };
+  const df = $('#dfilter'); if (df) df.oninput = e => { S.filter = e.target.value; const f = $('#filter'); if (f) f.value = S.filter; refreshTree(); relayout(false); $('#diff').scrollTop = 0; updateChrome(); };
+  document.querySelectorAll('.dtabs a').forEach(a => a.addEventListener('click', close));
+}
+function updateChrome() {
+  const s = S; if (!s || !$('#pbar')) return;
+  const files = s.tab === 'files';
+  const name = files ? (s.current ? s.current.filename : 'Files') : s.tab[0].toUpperCase() + s.tab.slice(1);
+  const nm = $('#pbar-name'); nm.title = name; nm.firstChild.textContent = name;
+  const list = files ? viewFilesAll() : [], i = files && s.current ? list.findIndex(f => f.filename === s.current.filename) : -1;
+  $('#pbar-prev').disabled = !files || i <= 0; $('#pbar-next').disabled = !files || i < 0 || i >= list.length - 1;
+  const t = (id, fn) => { const e = $(id); if (e) fn(e); };
+  t('#d-inline', e => e.classList.toggle('on', ui.mode === 'inline')); t('#d-split', e => e.classList.toggle('on', ui.mode === 'split'));
+  t('#d-stack', e => { e.checked = s.view === 'all'; }); t('#d-full', e => { e.checked = !!ui.full; });
+  t('#d-picker', e => { e.textContent = rangeLabel() + ' ▾'; });
+  t('#d-cmn', e => { e.textContent = (s.cAll || []).length || ''; });
+  t('#d-rv', e => { e.hidden = !auth.token || !s.commentsShown; e.textContent = s.pending.length ? 'Finish review (' + s.pending.length + ')' : 'Review'; });
+  t('#d-count', e => { const f = s.fl || []; e.textContent = f.length + ' files · ' + f.filter(x => s.reviewed.has(x.filename)).length + ' reviewed'; });
+}
+
 function wireFiles() {
   $('#filter').addEventListener('input', e => { S.filter = e.target.value; refreshTree(); relayout(false); $('#diff').scrollTop = 0; });
-  $('#picker-btn').onclick = openPicker;
+  $('#picker-btn').onclick = () => openPicker($('#picker-btn'));
   $('#m-inline').onclick = () => setMode('inline');
   $('#m-split').onclick = () => setMode('split');
   $('#full-btn').onclick = () => { ui.full = !ui.full; if (ui.full) S.fl.forEach(f => (f.st.expand = {})); relayout(true); updateToolbar(); syncHash(); };
@@ -609,6 +672,7 @@ function wireFiles() {
 
 function updateToolbar() {
   const s = S;
+  updateChrome();
   if (!$('#picker-btn')) return;
   $('#picker-btn').textContent = rangeLabel() + (s.busy ? ' …' : '') + ' ▾';
   $('#m-inline').classList.toggle('on', ui.mode === 'inline');
@@ -639,7 +703,7 @@ function measureChar() {
   charW = m.getBoundingClientRect().width / 100 || 7.6; m.remove();
 }
 
-function setMode(m) { ui.mode = m; store.set('mode', m); relayout(true); updateToolbar(); syncHash(); }
+function setMode(m) { ui.mode = m; store.set(modeKey(), m); relayout(true); updateToolbar(); syncHash(); }
 function setView(v) { store.set('view', v); if (S && S.view !== v) toggleView(); }
 function wireSwipe(el) {
   let x0 = 0, y0 = 0, t0 = 0, ok = false;
@@ -658,9 +722,9 @@ function toggleView() {
 }
 
 // ---------------------------------------------------------------- commit picker (AzDO "updates")
-function openPicker() {
+function openPicker(btn) {
   closePopovers();
-  const s = S, btn = $('#picker-btn'), r = btn.getBoundingClientRect();
+  const s = S, r = btn.getBoundingClientRect();
   const pop = document.createElement('div');
   pop.className = 'pop'; pop.id = 'picker'; pop.setAttribute('role', 'listbox');
   pop.style.left = Math.max(4, Math.min(r.left, innerWidth - 340)) + 'px'; pop.style.top = r.bottom + 4 + 'px';
@@ -686,7 +750,7 @@ function openPicker() {
   document.body.appendChild(pop);
   setTimeout(() => document.addEventListener('click', outsideClose, true), 0);
 }
-function outsideClose(e) { if (!e.target.closest('#picker') && !e.target.closest('#picker-btn') && !e.target.closest('#whomenu') && !e.target.closest('#who-btn') && !e.target.closest('#cpop')) closePopovers(); }
+function outsideClose(e) { if (!e.target.closest('#picker') && !e.target.closest('#picker-btn') && !e.target.closest('#d-picker') && !e.target.closest('#whomenu') && !e.target.closest('#who-btn') && !e.target.closest('#cpop')) closePopovers(); }
 function closePopovers() { document.querySelectorAll('.pop').forEach(p => p.remove()); document.removeEventListener('click', outsideClose, true); }
 
 // ---------------------------------------------------------------- tree (virtualized)

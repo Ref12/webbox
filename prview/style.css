@@ -114,8 +114,6 @@ dialog table { border-collapse: collapse; } dialog td { padding: 3px 12px 3px 0;
   .only-phone { display: inline-block; }
   #goto { display: none; }
   #brand { flex: 1; }
-  #tree { position: fixed; z-index: 30; top: 0; bottom: 0; left: 0; width: min(86vw, 340px); max-width: none; transform: translateX(-102%); transition: transform .18s; box-shadow: 4px 0 24px rgba(0,0,0,.3); resize: none; }
-  body.drawer #tree { transform: none; }
   body.drawer #scrim { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 25; }
   #prhead { padding: 8px 12px 0; } #toolbar { padding: 6px 10px; gap: 6px; } #filter { width: 100%; order: 9; }
   .hide-phone { display: none !important; }
@@ -178,10 +176,34 @@ dialog { max-height: 90vh; overflow: auto; }
 @media (max-width: 800px) { #who-login { display: none; } #top { gap: 6px; padding: 6px 8px; } #rate { font-size: 11px; } }
 
 /* ---- v3: tree icon, signed-out hint, file navigation */
-.tree-icon { display: block; } #menu { align-items: center; justify-content: center; padding: 4px 6px; } @media (max-width: 800px) { #menu.only-phone { display: inline-flex; } }
+.tree-icon { display: block; } #menu { align-items: center; justify-content: center; padding: 4px 6px; } #menu { display: none !important; }   /* the phone's file button is #pbar-menu in the compact bar */
 .addc.hint { background: transparent; color: var(--muted); border: 1px dashed var(--muted); line-height: 14px; opacity: .3; }
 .row:hover .addc.hint, .half:hover .addc.hint, .addc.hint:focus-visible { opacity: .9; } .addc.hint:hover { background: transparent; filter: none; color: var(--accent); border-color: var(--accent); }
 @media (hover: none) { .addc.hint { opacity: .4; } }
 .hint-reply { background: transparent; color: var(--muted); border: 1px dashed var(--line); font-size: 12px; }
 .fpos { padding: 0 6px; font-size: 12px; color: var(--muted); align-self: center; font-variant-numeric: tabular-nums; }
 #file-nav[hidden] { display: none; }
+
+/* ---- v4: phone layout: one compact bar over the file, everything else in the drawer */
+#drawer { display: contents; } #dtop, #dbottom, #pbar { display: none; } .dgrow { display: none; }
+@media (max-width: 800px) {
+  body.has-pr #top, body.has-pr #prhead, body.has-pr #toolbar { display: none; }
+  body.has-pr #pbar { display: flex; align-items: center; gap: 4px; height: 44px; padding: 0 4px; background: var(--panel); border-bottom: 1px solid var(--line); flex: none; }
+  #pbar button { min-width: 40px; height: 36px; display: inline-flex; align-items: center; justify-content: center; font-size: 22px; line-height: 1; padding: 0 6px; }
+  #pbar button:disabled { opacity: .35; }
+  #pbar-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; font: 600 13px var(--mono); }
+  #drawer { display: flex; flex-direction: column; position: fixed; z-index: 30; top: 0; bottom: 0; left: 0; width: min(86vw, 340px); background: var(--panel); transform: translateX(-102%); transition: transform .18s; box-shadow: 4px 0 24px rgba(0,0,0,.3); overflow: hidden; }
+  body.drawer #drawer { transform: none; }
+  #dtop { display: block; flex: none; max-height: 55%; overflow: auto; border-bottom: 1px solid var(--line); }
+  .dpr { padding: 10px 12px 4px; } .dtitle { overflow-wrap: anywhere; margin-bottom: 4px; } .dpr .meta { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; color: var(--muted); font-size: 12px; }
+  #d-details summary { cursor: pointer; color: var(--muted); font-size: 12px; margin-top: 6px; } #d-details .desc { padding: 6px 0; font-size: 13px; max-height: 40vh; overflow: auto; }
+  .dtabs { display: flex; gap: 2px; padding: 0 8px; } .dtabs a { padding: 8px 10px; color: var(--text); text-decoration: none; border-bottom: 2px solid transparent; font-size: 13px; } .dtabs a.on { border-bottom-color: var(--accent); font-weight: 600; }
+  .dsec { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 6px 12px; } label.dsec { display: flex; }
+  #dfilter { flex: 1; min-width: 0; width: 100%; padding: 6px 8px; }
+  #tree { position: relative; flex: 1 1 auto; width: auto; min-width: 0; max-width: none; min-height: 120px; resize: none; border-right: 0; background: transparent; }
+  .dgrow { display: block; flex: 1; }
+  #dbottom { display: block; flex: none; max-height: 50%; overflow: auto; border-top: 1px solid var(--line); background: var(--panel); }
+  #dbottom summary { cursor: pointer; padding: 10px 12px; font-weight: 600; font-size: 13px; }
+  #drawer .seg { display: inline-flex; } #drawer .seg button { border: 1px solid var(--line); border-radius: 0; background: var(--panel); } #drawer .seg button.on { background: var(--sel); border-color: var(--accent); }
+  .pop { z-index: 40; }
+}
