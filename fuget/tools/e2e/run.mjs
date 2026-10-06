@@ -62,7 +62,7 @@ assert.match(decodeURIComponent(memberUrl), /\?m=M:Newtonsoft\.Json\.Linq\.JObje
 await page.locator('.member.open a.btn', { hasText: 'Decompile this member' }).click();
 await page.waitForSelector('pre.decomp', { timeout: 240000 });
 const dcode = await page.locator('pre.decomp').innerText();
-assert.match(dcode, /public static JObject Parse\(string json\)/);
+assert.match(dcode, /public (new )?static JObject Parse\(string json\)/);
 metrics.decompileMember = (await page.evaluate(() => window.__metrics.decompile)).at(-1);
 await page.getByRole('link', { name: 'Show whole type' }).click();
 await page.waitForFunction(() => document.querySelector('pre.decomp')?.innerText.includes('class JObject'), null, { timeout: 240000 });
