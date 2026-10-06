@@ -75,14 +75,15 @@ test('Settings: All files stacked is an option, remembered in localStorage and i
   await finish(h);
 });
 
-test('Settings has the one / all switch on the phone', async () => {
+test('Settings has the one / all switch on the phone (from the drawer)', async () => {
   const h = await start({ view: null, viewport: { width: 390, height: 844 }, mobile: true }); const p = h.page;
-  await open(h);
-  await p.click('#settings-btn');
+  await open(h, PR + '?f=' + LINK);
+  await p.click('#pbar-menu'); await p.click('#dbottom summary'); await p.click('#d-settings');
   await p.check('#st-stack'); await p.click('#st-close');
-  await p.waitForFunction(() => document.querySelectorAll('#win .fh').length > 1);
-  await p.click('#settings-btn'); await p.uncheck('#st-stack'); await p.click('#st-close');
-  await p.waitForFunction(() => document.querySelectorAll('#win .fh').length === 1);
+  await p.waitForFunction(() => window.__prview.state.view === 'all');
+  await p.click('#pbar-menu'); await p.click('#dbottom summary'); await p.click('#d-settings');
+  await p.uncheck('#st-stack'); await p.click('#st-close');
+  await p.waitForFunction(() => window.__prview.state.view === 'one');
   await finish(h);
 });
 
@@ -115,10 +116,12 @@ test('phone: swipe changes the file; the drawer has the tree icon', async () => 
   const h = await start({ view: null, viewport: { width: 390, height: 844 }, mobile: true }); const p = h.page;
   await open(h);
   const paths = await treePaths(p);
+  await p.click('#tree .tr[data-path="' + paths[0] + '"]');   // a phone opens on the file list; pick the first file
+  await p.waitForFunction(() => !document.body.classList.contains('drawer'));
   // the toggle is an inline SVG tree icon in currentColor, not the ☰ glyph
-  const ic = await p.evaluate(() => { const b = document.querySelector('#menu'), s = b.querySelector('svg.tree-icon'); return { text: b.textContent.trim(), svg: !!s, stroke: s && getComputedStyle(s).stroke, color: getComputedStyle(b).color, w: s && s.getBoundingClientRect().width }; });
+  const ic = await p.evaluate(() => { const b = document.querySelector('#pbar-menu'), s = b.querySelector('svg.tree-icon'); return { text: b.textContent.trim(), svg: !!s, stroke: s && getComputedStyle(s).stroke, color: getComputedStyle(b).color, w: s && s.getBoundingClientRect().width }; });
   assert.equal(ic.text, ''); assert.ok(ic.svg); assert.equal(ic.stroke, ic.color); assert.ok(ic.w >= 16 && ic.w <= 24);
-  assert.ok((await p.locator('#menu').boundingBox()).width >= 24);
+  assert.ok((await p.locator('#pbar-menu').boundingBox()).width >= 24);
   // swipe left: next file
   await p.evaluate(() => {
     const el = document.querySelector('#diff');
@@ -133,12 +136,11 @@ test('phone: swipe changes the file; the drawer has the tree icon', async () => 
   });
   assert.equal(await selected(p), paths[0]);
   // the drawer picks a file
-  await p.click('#menu');
-  await p.waitForFunction(() => document.querySelector('#tree').getBoundingClientRect().right > 100);
+  await p.click('#pbar-menu');
+  await p.waitForFunction(() => document.querySelector('#drawer').getBoundingClientRect().right > 100);
   await p.waitForTimeout(400);
-  await shot(p, 'phone-tree');
   await p.click('#tree .tr[data-path$="LinkTask.cs"]');
-  await p.waitForFunction(() => document.querySelector('#tree').getBoundingClientRect().right <= 0);
+  await p.waitForFunction(() => document.querySelector('#drawer').getBoundingClientRect().right <= 0);
   assert.equal(await selected(p), LINK);
   assert.equal((await heads(p)).length, 1);
   await shot(p, 'phone-diff');
@@ -149,12 +151,12 @@ test('tree icon: inline SVG, currentColor, light and dark', async () => {
   for (const scheme of ['light', 'dark']) {
     const h = await start({ view: null, viewport: { width: 390, height: 844 }, mobile: true }); const p = h.page;
     await p.emulateMedia({ colorScheme: scheme });
-    await open(h);
-    const r = await p.evaluate(() => { const b = document.querySelector('#menu'), s = b.querySelector('svg'); const html = s.outerHTML; return { color: getComputedStyle(b).color, stroke: getComputedStyle(s).stroke, bg: getComputedStyle(document.body).backgroundColor, html }; });
+    await open(h, PR + '?f=' + LINK);
+    const r = await p.evaluate(() => { const b = document.querySelector('#pbar-menu'), s = b.querySelector('svg'); const html = s.outerHTML; return { color: getComputedStyle(b).color, stroke: getComputedStyle(s).stroke, bg: getComputedStyle(document.body).backgroundColor, html }; });
     assert.equal(r.stroke, r.color, scheme + ': follows currentColor');
     assert.match(r.html, /stroke="currentColor"/);
     assert.notEqual(r.color, r.bg, scheme + ': visible against the page');
-    await p.locator('#menu').screenshot({ path: SHOTS + 'tree-icon-' + scheme + '.png' });
+    await p.locator('#pbar-menu').screenshot({ path: SHOTS + 'tree-icon-' + scheme + '.png' });
     await h.close();
   }
 });

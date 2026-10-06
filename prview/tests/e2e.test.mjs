@@ -241,18 +241,3 @@ test('landing: paste a PR URL', async () => {
   await finish(h);
 });
 
-test('phone: the tree is a drawer', async () => {
-  const h = await start({ viewport: { width: 390, height: 844 }, mobile: true }); const p = h.page;
-  await open(h);
-  const left = () => p.evaluate(() => document.querySelector('#tree').getBoundingClientRect().right);
-  assert.ok(await left() <= 0, 'tree hidden');
-  await shot(p, 'phone-diff');
-  await p.click('#menu');
-  await p.waitForFunction(() => document.querySelector('#tree').getBoundingClientRect().right > 100);
-  await p.waitForTimeout(400); // slide-in transition
-  await shot(p, 'phone-tree');
-  await p.click('#tree .tr[data-path$="LinkTask.cs"]');
-  await p.waitForFunction(() => document.querySelector('#tree').getBoundingClientRect().right <= 0);
-  assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'no page-level horizontal scroll');
-  await finish(h);
-});

@@ -94,7 +94,7 @@ function helpDialog() {
 window.addEventListener('hashchange', () => { if (S && S.hashSet === location.hash) return; route(); });
 function syncHash() {
   if (!S) return;
-  const p = { f: S.view === 'one' ? S.selected : S.selected && S.selected !== S.order[0]?.filename ? S.selected : '', c: S.cparam || '', m: ui.mode === 'split' ? 'split' : '', v: S.view !== defaultView() ? S.view : '', x: ui.full ? '1' : '' };
+  const p = { f: S.drawerStart ? '' : S.view === 'one' ? S.selected : S.selected && S.selected !== S.order[0]?.filename ? S.selected : '', c: S.cparam || '', m: ui.mode === 'split' ? 'split' : '', v: S.view !== defaultView() ? S.view : '', x: ui.full ? '1' : '' };
   const h = toRoute(S.ref, p, S.tab);
   if (h !== location.hash) { S.hashSet = h; history.replaceState(null, '', h); }
 }
@@ -165,7 +165,7 @@ async function openPr(ref, tab, params) {
     gh.mergeBase(ref, pr.base.sha, pr.head.sha).then(sha => { if (sha) s.mergeBase = sha; }).catch(() => {}).then(() => { if (S === s) { s.mbReady = true; if (s.gen === 0) applyRange(params.c || '', true); } });
     loadComments(s);
     renderPage();
-    if (PHONE() && tab === 'files' && !params.f) document.body.classList.add('drawer');   // a phone starts on the file list, unless the URL names a file
+    if (PHONE() && tab === 'files' && !params.f) { document.body.classList.add('drawer'); s.drawerStart = true; }   // a phone starts on the file list, unless the URL names a file
     $('#diff') && ($('#diff').dataset.state = 'loading');
   } catch (e) { if (S === s) { $('#main').innerHTML = '<div class="empty">Could not open this pull request.</div>'; showError(e); } }
 }
@@ -1092,6 +1092,7 @@ function scrollToFile(path, instant) {
   S.winKey = null; renderDiff();
 }
 function selectFile(path) {
+  S.drawerStart = false;
   S.selected = path;
   S.current = S.fl.find(f => f.filename === path) || S.current;
   scrollToFile(path);
