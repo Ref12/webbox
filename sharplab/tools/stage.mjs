@@ -9,9 +9,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-const [src, out] = [path.resolve(process.argv[2] ?? 'dist/wwwroot'), path.resolve(process.argv[3] ?? '_site/sharplab')];
+const pos = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+const opt = Object.fromEntries(process.argv.slice(2).filter((a) => a.startsWith('--')).map((a) => a.slice(2).split('=')));   // --aot=<dist-aot/wwwroot>: the opt-in AOT build, staged as aot/_framework
+const [src, out] = [path.resolve(pos[0] ?? 'dist/wwwroot'), path.resolve(pos[1] ?? '_site/sharplab')];
 fs.rmSync(out, { recursive: true, force: true });
 fs.cpSync(src, out, { recursive: true });
+if (opt.aot) {
+  fs.cpSync(path.join(path.resolve(opt.aot), '_framework'), path.join(out, 'aot/_framework'), { recursive: true });
+  fs.rmSync(path.join(out, 'aot/_framework/blazor.boot.json'), { force: true });
+}
 const hash = (buf) => crypto.createHash('sha1').update(buf).digest('hex').slice(0, 10);
 const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]));
 const rel = (p) => path.relative(out, p).split(path.sep).join('/');
@@ -63,6 +69,7 @@ while (done.size < targets.length) {
     if (ready === 'config.js') {
       const need = (s, r) => { if (!text.includes(s)) throw new Error('config.js: expected ' + s); text = text.replace(s, r); };
       need("export const BUILD = 'dev';", "export const BUILD = '" + dotnetJsHash + "';");
+      if (opt.aot) need("aot: './aot/_framework/dotnet.js'", "aot: './aot/_framework/dotnet.js?h=" + hash(fs.readFileSync(path.join(out, 'aot/_framework/dotnet.js'))) + "'");
       need("ref: 'ref/manifest.json'", "ref: 'ref/manifest.json?h=" + hashOf('ref/manifest.json') + "'");
       need("lazy: 'lazy/manifest.json'", "lazy: 'lazy/manifest.json?h=" + hashOf('lazy/manifest.json') + "'");
       need("st: './_framework/dotnet.js'", "st: './_framework/dotnet.js?h=" + dotnetJsHash + "'");

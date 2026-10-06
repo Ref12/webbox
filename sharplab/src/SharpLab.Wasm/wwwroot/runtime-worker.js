@@ -9,11 +9,12 @@ import { MANIFESTS, DOTNET, BROTLI } from './config.js';
 
 const role = self.name.startsWith('intelli') ? 'intelli' : 'exec';
 const emit = (event, data) => self.postMessage({ ...data, event });
-let assets, exportsRef;
+let assets, exportsRef, aot = false;
 
 async function boot(args) {
-  assets = createAssets({ emit, prefix: 'sharplab', brotli: BROTLI && !args.nobr });
-  const { dotnet } = await import(DOTNET.st);
+  aot = !!args.aot;
+  assets = createAssets({ emit, aot, prefix: 'sharplab', brotli: BROTLI && !args.nobr });
+  const { dotnet } = await import(aot ? DOTNET.aot : DOTNET.st);
   const rt = await dotnet.withDiagnosticTracing(false).withResourceLoader(assets.loadBootResource).create();
   for (const k of await caches.keys()) if (k.startsWith('sharplab-fw-') && k !== assets.fwCacheName) await caches.delete(k);
   rt.setModuleImports('host', assets.hostModule);
@@ -41,7 +42,7 @@ const handlers = {
     await (booted = boot(args));
     assets.markReady();
     emit('metrics', { patch: { ['net' + (role === 'exec' ? '' : 'Intelli')]: { ...assets.net }, ['wireBytesAtBoot' + (role === 'exec' ? '' : 'Intelli')]: wire() } });
-    return { role };
+    return { role, aot };
   },
 
   // ---- exec ----

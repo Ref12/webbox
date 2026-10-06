@@ -4,14 +4,16 @@ import { renderJit } from './jit.js';
 import { RuntimeClient } from './protocol.js';
 import { registerRoslyn } from './roslyn-monaco.js';
 import { VS_DARK } from './classify.js';
-import { BUILD } from './config.js';
+import { BUILD, wantAot } from './config.js';
 
 // The page only draws: compile, the views and Run live in the "exec" worker, Roslyn IntelliSense in the "intelli" worker (runtime-worker.js), so neither a long
 // compile nor a running program blocks typing. BUILD and the manifest URLs (config.js) are rewritten by tools/stage.mjs (content hashes) when the site is staged.
+const AOT = wantAot();   // opt-in AOT runtime build (?aot=1 or the remembered header toggle)
 const noBr = new URLSearchParams(location.search).has('nobr');   // measuring: skip the .br files
 
 const $ = (id) => document.getElementById(id);
-const metrics = (window.__metrics = { marks: {}, assets: [], compiles: [], build: BUILD, latency: {}, completion: [] });
+{ const t = $('aot'); if (t) { t.checked = AOT; t.onchange = () => { try { localStorage.setItem('webbox-aot', t.checked ? '1' : '0'); } catch {} const u = new URL(location.href); u.searchParams.delete('aot'); location.href = u.href; }; } }
+const metrics = (window.__metrics = { marks: {}, assets: [], compiles: [], build: BUILD, aotRequested: AOT, latency: {}, completion: [] });
 const t0 = performance.now();
 const now = () => Math.round(performance.now() - t0);
 const mark = (k) => (metrics.marks[k] = now());
@@ -321,7 +323,7 @@ async function main() {
   // the runtimes
   setStatus('downloading .NET runtime…');
   exec.start();
-  await exec.request('init', { nobr: noBr });
+  await exec.request('init', { nobr: noBr, aot: AOT });
   ready = true;
   metrics.ready = true;
   await refresh();
@@ -333,7 +335,7 @@ async function main() {
   try {
     setBadge('IntelliSense: starting runtime…', 'loading');
     intelliW.start();
-    await intelliW.request('init', { nobr: noBr });
+    await intelliW.request('init', { nobr: noBr, aot: false });   // IntelliSense runs on the relink build (Roslyn Features does not survive the AOT build's trimming)
     await intelliW.request('loadIntellisense');
     intelliReady = true;
     mark('intellisenseReady');
