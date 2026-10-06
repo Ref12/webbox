@@ -2,6 +2,14 @@ import { dotnet } from './_framework/dotnet.js';
 import { encodeShare, decodeShare, DEFAULTS } from './share.js';
 import { findPath, nodeAt, selectionOf, label } from './syntaxpath.js';
 import { renderJit } from './jit.js';
+import { brotliDecode } from './br.js';
+
+// BUILD and the manifest URL are rewritten by tools/stage.mjs (content hashes) when the site is staged for GitHub Pages.
+const BUILD = 'dev';
+const MANIFESTS = { ref: 'ref/manifest.json' };
+const hashes = (window.__hashes = {});   // site path -> content hash: the ?h= query makes a changed file a new URL (Pages caches for 10 minutes)
+const noBr = new URLSearchParams(location.search).has('nobr');   // measuring: skip the .br files
+const withHash = (p) => (hashes[p] ? p + '?h=' + hashes[p] : p);
 
 const $ = (id) => document.getElementById(id);
 const metrics = (window.__metrics = { marks: {}, assets: [], compiles: [] });
@@ -39,25 +47,74 @@ window.fetch = async function (input, init) {
   throw err;
 };
 
-// ---- assets (reference assemblies): Cache API first, then network; copied from csharp/ ----
+// ---- assets (reference assemblies): Cache API first, then network; .br decoding, hashes and boot-resource loading as in csharp/ (copied) ----
 let refVersion = 'v0';
 const taken = new Map();
 async function cacheOpen(name) { try { return await caches.open(name); } catch { return null; } }
+// Binary assets are shipped as <file>.br and decoded here (see br.js); the plain file is the fallback (and what ?nobr=1 uses).
+const PACKED = /\.(wasm|dll|bin|pdb)(\?|$)/;
+async function fetchPacked(key) {
+  if (!noBr && PACKED.test(key)) {
+    try {
+      const u = new URL(key); u.pathname += '.br';
+      const resp = await fetch(u.href);
+      if (resp.ok) {
+        const packed = new Uint8Array(await resp.arrayBuffer());
+        const bytes = await brotliDecode(packed);
+        return { bytes, wire: packed.length, status: 200 };
+      }
+    } catch (e) { console.warn('brotli path failed for ' + fileName(key) + ', using the plain file:', e.message); }
+  }
+  const resp = await fetch(key);
+  if (!resp.ok) return { bytes: null, status: resp.status };
+  const bytes = new Uint8Array(await resp.arrayBuffer());
+  return { bytes, wire: Number(resp.headers.get('content-length') || 0) || bytes.length, status: 200 };
+}
 async function getBytes(url, cacheName, { cacheIt = true } = {}) {
-  const key = new URL(url, location.href).href;
+  const key = new URL(withHash(url), location.href).href;
   const cache = cacheIt ? await cacheOpen(cacheName) : null;
   const t = performance.now();
   if (cache) {
     const hit = await cache.match(key);
-    if (hit) return { bytes: new Uint8Array(await hit.arrayBuffer()), from: 'cache', ms: performance.now() - t };
+    if (hit) { const b = new Uint8Array(await hit.arrayBuffer()); return { bytes: b, from: 'cache', ms: performance.now() - t }; }
   }
-  const resp = await fetch(key);
-  if (resp.status === 404) return { bytes: null, from: 'network', ms: performance.now() - t };
-  if (!resp.ok) throw new Error('HTTP ' + resp.status);
-  const b = new Uint8Array(await resp.arrayBuffer());
-  if (cache) { try { await cache.put(key, new Response(b)); } catch (e) { console.warn('cache put failed', e); } }
-  return { bytes: b, from: 'network', ms: performance.now() - t };
+  let last;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const got = await fetchPacked(key);   // same-origin goes through the retrying wrapper above
+      if (got.status === 404) return { bytes: null, from: 'network', ms: performance.now() - t };
+      if (!got.bytes) throw new Error('HTTP ' + got.status);
+      if (cache) { try { await cache.put(key, new Response(got.bytes)); } catch (e) { console.warn('cache put failed', e); } }
+      return { bytes: got.bytes, from: 'network', ms: performance.now() - t, wire: got.wire };
+    } catch (e) { last = e; await new Promise((r) => setTimeout(r, 400 * 3 ** (attempt - 1))); }
+  }
+  throw new Error('Could not download ' + fileName(url) + ': ' + last.message);
 }
+function registerHashes(m) {
+  if (m.coreHash) hashes['ref/core.bin'] = m.coreHash;
+  if (m.typesHash) hashes['ref/types.json'] = m.typesHash;
+  for (const a of m.assemblies || []) if (a.h) hashes['ref/a/' + a.name] = a.h;
+}
+// The .NET runtime's own downloads (assemblies, dotnet.native.wasm): from the Cache API, else <file>.br decoded here, else the plain file.
+const fwCacheName = 'sharplab-fw-' + BUILD;
+function loadBootResource(type, name, defaultUri) {
+  if (noBr || !/\.wasm$/.test(name)) return undefined;   // scripts and everything else: the runtime's default (Pages gzips those)
+  return (async () => {
+    const key = new URL(defaultUri, location.href).href;
+    const cache = await cacheOpen(fwCacheName);
+    let bytes;
+    const hit = cache && (await cache.match(key));
+    if (hit) bytes = new Uint8Array(await hit.arrayBuffer());
+    else {
+      const got = await fetchPacked(key);
+      if (!got.bytes) throw new Error('Could not download ' + name + ': HTTP ' + got.status + ' (after 3 tries). Check your connection and reload.');
+      bytes = got.bytes;
+      if (cache) cache.put(key, new Response(bytes)).catch((e) => console.warn('cache put failed', e));
+    }
+    return new Response(bytes, { headers: { 'content-type': 'application/wasm' } });
+  })();
+}
+// JS side of Interop.FetchAsset / TakeAsset
 const hostModule = {
   async fetchAsset(path) {
     const volatile = /manifest\.json$/.test(path);
@@ -322,14 +379,14 @@ async function main() {
 
   // runtime + references
   setStatus('downloading .NET runtime…');
-  const { getAssemblyExports, getConfig, setModuleImports } = await dotnet.withDiagnosticTracing(false).create();
+  const { getAssemblyExports, getConfig, setModuleImports } = await dotnet.withDiagnosticTracing(false).withResourceLoader(loadBootResource).create();
   setModuleImports('host', hostModule);
   mark('runtimeCreated');
   X = (await getAssemblyExports(getConfig().mainAssemblyName)).Interop;
   mark('exportsReady');
   setStatus('loading reference assemblies…');
-  const mf = await (await fetch('ref/manifest.json')).text();
-  refVersion = JSON.parse(mf).version;
+  const mf = await (await fetch(MANIFESTS.ref)).text();
+  refVersion = JSON.parse(mf).version; registerHashes(JSON.parse(mf));
   for (const k of await caches.keys()) if (k.startsWith('sharplab-refs-') && k !== 'sharplab-refs-' + refVersion) await caches.delete(k);
   const core = await getBytes('ref/core.bin', 'sharplab-refs-' + refVersion);
   metrics.coreBundle = { bytes: core.bytes.length, from: core.from, ms: Math.round(core.ms) };

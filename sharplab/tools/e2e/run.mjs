@@ -1,12 +1,12 @@
 // Headless-Chromium end-to-end check of the published site, served under a Pages-like path (/webbox/sharplab/).
-// Usage: node run.mjs <publishedWwwroot> [docsDir] [metrics.json]
+// Usage: node run.mjs <stagedSite> [docsDir] [metrics.json]
 import { chromium } from 'playwright-core';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 
-const site = path.resolve(process.argv[2] ?? '../../dist/wwwroot');
+const site = path.resolve(process.argv[2] ?? '../../_site');   // the staged site: the folder that contains sharplab/ (tools/stage.mjs)
 const docs = path.resolve(process.argv[3] ?? '../../docs');
 const metricsOut = path.resolve(process.argv[4] ?? '../../docs/metrics.json');
 const PREFIX = '/webbox/sharplab/';
@@ -16,8 +16,9 @@ const metrics = {};
 const servers = [];
 process.on('exit', () => servers.forEach((s) => s.kill()));
 
-async function serve(port, encodings) {
-  const s = spawn(process.execPath, [path.resolve('..', 'serve.mjs'), site, String(port), PREFIX], { stdio: 'inherit', env: { ...process.env, SERVE_ENCODINGS: encodings } });
+async function serve(port, gzip) {
+  // pages-sim: like GitHub Pages: path prefix, max-age=600, no Content-Encoding for precompressed files, gzip on the fly (text only, or everything with gzip=all)
+  const s = spawn(process.execPath, [path.resolve('..', 'pages-sim.mjs'), site, String(port), '/webbox', '--gzip=' + gzip], { stdio: 'ignore' });
   servers.push(s);
   await new Promise((r) => setTimeout(r, 800));
   return s;
@@ -35,36 +36,35 @@ function track(page) {
   page.on('pageerror', (e) => console.log('[pageerror]', e.message));
   return wire;
 }
-async function load(ctx, port, hash = '') {
+async function load(ctx, port, hash = '', query = '') {
   const page = await ctx.newPage();
   const wire = track(page);
   const t = Date.now();
-  await page.goto('http://localhost:' + port + PREFIX + hash);
+  await page.goto('http://localhost:' + port + PREFIX + query + hash);
   await page.waitForFunction(() => window.__metrics?.marks?.firstView || window.__metrics?.error, null, { timeout: 300000 });
   const m = await page.evaluate(() => window.__metrics);
   assert.equal(m.error, undefined, 'load error: ' + m.error);
   return { page, wire, m, wallMs: Date.now() - t };
 }
 
-// ---------- 1. Pages-like server (gzip only), cold then warm ----------
-let server = await serve(8124, 'gzip');
+// ---------- 1. baseline: plain files (?nobr=1), Pages gzipping everything on the fly (the best case if Pages does compress .wasm/.dll) ----------
+let server = await serve(8124, 'all');
 let ctx = await browser.newContext({ viewport: { width: 1280, height: 820 }, permissions: ['clipboard-read', 'clipboard-write'] });
-const cold = await load(ctx, 8124);
-metrics.pagesLike_gzip = { cold: { firstViewMs: cold.m.marks.firstView, marks: cold.m.marks, wireBytes: cold.wire, wireBytesEncodedBody: cold.m.wireBytesAtFirstView, compiles: cold.m.compiles, coreBundle: cold.m.coreBundle } };
-console.log('Pages-like (gzip) cold: first view', cold.m.marks.firstView, 'ms; wire', JSON.stringify(cold.wire));
-await cold.page.close();
-const warm = await load(ctx, 8124);
-metrics.pagesLike_gzip.warm = { firstViewMs: warm.m.marks.firstView, marks: warm.m.marks, coreBundle: warm.m.coreBundle };
-console.log('warm: first view', warm.m.marks.firstView, 'ms');
-await warm.page.close();
+const plain = await load(ctx, 8124, '', '?nobr=1');
+metrics.plain_gzipAll = { cold: { firstViewMs: plain.m.marks.firstView, marks: plain.m.marks, wireBytes: plain.wire } };
+console.log('plain files, gzip all: first view', plain.m.marks.firstView, 'ms; wire', JSON.stringify(plain.wire));
 await ctx.close(); server.kill();
 
-// ---------- 2. brotli-capable server, cold ----------
-server = await serve(8125, 'br,gzip');
+// ---------- 2. as shipped: .br files decoded in the page, Pages gzips text only; cold, then warm ----------
+server = await serve(8125, 'text');
 ctx = await browser.newContext({ viewport: { width: 1280, height: 820 }, permissions: ['clipboard-read', 'clipboard-write'] });
 const br = await load(ctx, 8125);
-metrics.brotli = { cold: { firstViewMs: br.m.marks.firstView, marks: br.m.marks, wireBytes: br.wire } };
-console.log('brotli cold: first view', br.m.marks.firstView, 'ms; wire', JSON.stringify(br.wire));
+metrics.shipped = { cold: { firstViewMs: br.m.marks.firstView, marks: br.m.marks, wireBytes: br.wire, wireBytesEncodedBody: br.m.wireBytesAtFirstView, coreBundle: br.m.coreBundle, compiles: br.m.compiles } };
+console.log('shipped (.br decoded in page) cold: first view', br.m.marks.firstView, 'ms; wire', JSON.stringify(br.wire));
+const warm = await load(ctx, 8125);
+metrics.shipped.warm = { firstViewMs: warm.m.marks.firstView, marks: warm.m.marks, coreBundle: warm.m.coreBundle };
+console.log('warm: first view', warm.m.marks.firstView, 'ms');
+await warm.page.close();
 const { page } = br;
 
 // ---------- 3. features ----------
@@ -197,6 +197,6 @@ await page.screenshot({ path: path.join(docs, 'screenshot.png') });
 await tab('syntax'); await page.evaluate(() => window.__sharplab.ed.setSel(150, 150)); await page.waitForTimeout(500);
 await page.screenshot({ path: path.join(docs, 'screenshot-syntax.png') });
 fs.writeFileSync(metricsOut, JSON.stringify(metrics, null, 2));
-console.log('E2E OK', JSON.stringify({ coldGzipFirstView: metrics.pagesLike_gzip.cold.firstViewMs, warm: metrics.pagesLike_gzip.warm.firstViewMs, brotliFirstView: metrics.brotli.cold.firstViewMs }));
+console.log('E2E OK', JSON.stringify({ plainGzipAllFirstView: metrics.plain_gzipAll.cold.firstViewMs, shippedCold: metrics.shipped.cold.firstViewMs, shippedWarm: metrics.shipped.warm.firstViewMs }));
 await browser.close(); server.kill();
 process.exit(0);
