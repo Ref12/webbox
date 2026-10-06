@@ -190,7 +190,8 @@ const dcol = await page.evaluate(() => { const o = {}; for (const sp of document
 console.log('directive colours:', JSON.stringify(dcol));
 assert.equal(dcol['#r'], 'rgb(155, 155, 155)', '#r coloured as a preprocessor directive in the input');
 await page.keyboard.press('Control+Enter');
-await page.waitForFunction(() => /nuget Newtonsoft\.Json/.test(document.querySelector('.entry:last-child')?.innerText || ''), null, { timeout: 60000 });
+await page.waitForFunction(() => { const e = document.querySelector('.entry:last-child'); return /Newtonsoft\.Json, 13/.test(e?.innerText || '') && e.querySelector('.ms'); }, null, { timeout: 60000 });
+assert.ok(!(await page.locator('.entry').last().locator('.err').count()), 'the completed #r line runs without errors');
 const dh = await page.locator('.entry').last().locator('.code span').evaluateAll((els) => els.map((e) => e.className + ':' + e.textContent.slice(0, 4)));
 console.log('directive in history:', dh.join(' '));
 assert.ok(dh.some((x) => x.startsWith('t-preproc:#r')), '#r coloured in the history too');
