@@ -158,6 +158,77 @@ const lat = [];
 for (const t of ['Console.Wri', 'answer.', 'new List<int>().Ad', 'Enumerable.Ra']) lat.push(await page.evaluate(async (t) => { const s = performance.now(); await window.__intelli('Complete', t, t.length, ''); return Math.round(performance.now() - s); }, t));
 console.log('completion latency (ms, warm):', lat.join(', '));
 
+// ---------- several dependent submissions ----------
+await page.evaluate(() => window.__submit('var a = 5;'));
+await page.evaluate(() => window.__submit('int Sq(int x) => x * x;'));
+await page.evaluate(() => window.__submit('var b = Sq(a) + 1;'));
+await page.evaluate(() => window.__submit('b * 2'));
+assert.ok((await page.locator('.entry').last().locator('.val').innerText()).trim() === '52', 'dependent submissions share state');
+
+// ---------- #r completion: nuget: , packages and versions from nuget.org ----------
+const rows = () => page.locator('.suggest-widget .monaco-list-row').allInnerTexts();
+await page.evaluate(() => window.monaco.editor.getEditors()[0].setValue(''));
+await page.click('#editor .monaco-editor .view-lines');
+await page.keyboard.type('#r "');
+await page.waitForSelector('.suggest-widget.visible', { timeout: 20000 });
+let rr = await rows(); console.log('#r " ->', rr.slice(0, 4).join(' | '));
+assert.ok(rr[0].startsWith('nuget:'), '#r " offers nuget: first');
+assert.ok(rr.some((r) => r.startsWith('System.Net.Http')), 'and framework assemblies');
+await page.keyboard.press('Tab');
+assert.equal(await getInput(), '#r "nuget: "');
+await page.keyboard.type('Newtonsoft.J');
+await page.waitForFunction(() => [...document.querySelectorAll('.suggest-widget .monaco-list-row')].some((r) => r.innerText.startsWith('Newtonsoft.Json')), null, { timeout: 20000 });
+rr = await rows(); console.log('packages ->', rr.slice(0, 3).join(' | '));
+await page.keyboard.press('Tab');
+assert.equal(await getInput(), '#r "nuget: Newtonsoft.Json, "', 'package inserted with ", "');
+await page.waitForFunction(() => [...document.querySelectorAll('.suggest-widget .monaco-list-row')].some((r) => /^\d+\.\d+/.test(r.innerText)), null, { timeout: 20000 });
+rr = await rows(); console.log('versions ->', rr.slice(0, 3).join(' | '));
+await page.keyboard.press('Tab');
+assert.match(await getInput(), /^#r "nuget: Newtonsoft\.Json, \d+\.\d+\.\d+"$/, 'newest version inserted');
+await page.waitForTimeout(1500);
+const dcol = await page.evaluate(() => { const o = {}; for (const sp of document.querySelectorAll('#editor .view-line span span')) o[sp.textContent.trim()] = getComputedStyle(sp).color; return o; });
+console.log('directive colours:', JSON.stringify(dcol));
+assert.equal(dcol['#r'], 'rgb(155, 155, 155)', '#r coloured as a preprocessor directive in the input');
+await page.keyboard.press('Control+Enter');
+await page.waitForFunction(() => /nuget Newtonsoft\.Json/.test(document.querySelector('.entry:last-child')?.innerText || ''), null, { timeout: 60000 });
+const dh = await page.locator('.entry').last().locator('.code span').evaluateAll((els) => els.map((e) => e.className + ':' + e.textContent.slice(0, 4)));
+console.log('directive in history:', dh.join(' '));
+assert.ok(dh.some((x) => x.startsWith('t-preproc:#r')), '#r coloured in the history too');
+
+// ---------- commands, copy buttons on output boxes ----------
+await page.evaluate(() => window.__submit('#help'));
+let ent = page.locator('.entry').last();
+assert.ok((await ent.locator('.out').innerText()).includes('#reset'), '#help lists the commands');
+assert.ok(await ent.locator('.code .t-preproc').count() >= 1, '#help is coloured as a directive');
+await ent.locator('.out .copy').click();
+assert.equal(await page.evaluate(() => navigator.clipboard.readText()), await ent.locator('.out').evaluate((e) => e.firstChild.textContent), 'output copy button copies the plain text');
+await page.evaluate(() => window.__submit('var kept = 123;'));
+await page.evaluate(() => window.__submit('kept + 1'));
+await page.locator('.entry').last().locator('.val .copy').click();
+assert.equal(await page.evaluate(() => navigator.clipboard.readText()), '124', 'return value copy');
+await page.evaluate(() => window.__submit('Console.WriteLine("line1\\nline2"); throw new InvalidOperationException("boom");'));
+ent = page.locator('.entry').last();
+await ent.locator('.out .copy').click();
+assert.equal(await page.evaluate(() => navigator.clipboard.readText()), 'line1\nline2');
+await ent.locator('.err .copy').last().click();
+assert.ok((await page.evaluate(() => navigator.clipboard.readText())).includes('boom'), 'error copy');
+await page.evaluate(() => window.__submit('#clear'));
+assert.equal(await page.locator('.entry').count(), 0, '#clear empties the transcript');
+assert.ok((await page.locator('#transcript .note').innerText()).includes('#reset'), '#clear points at #reset');
+await page.evaluate(() => window.__submit('kept'));
+assert.equal((await page.locator('.entry').last().locator('.val').innerText()).trim(), '123', 'state survives #clear');
+await page.evaluate(() => window.__submit('clear'));
+assert.equal(await page.locator('.entry').count(), 0, 'bare clear works too');
+await page.route('https://scripts.test/hello.csx', (route) => route.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*', 'content-type': 'text/plain' }, body: 'var loaded = 40 + 2;\nloaded' }));
+await page.evaluate(() => window.__submit('#load "https://scripts.test/hello.csx"'));
+await page.waitForFunction(() => document.querySelectorAll('.entry').length >= 2, null, { timeout: 30000 });
+assert.ok((await page.locator('#transcript').innerText()).includes('42'), '#load runs the fetched script');
+await page.evaluate(() => window.__submit('#reset'));
+await page.evaluate(() => window.__submit('kept'));
+assert.ok((await page.locator('.entry').last().locator('.err').first().innerText()).includes('kept'), '#reset forgot the variables');
+await page.evaluate(() => window.__submit('#nope'));
+assert.ok((await page.locator('.entry').last().locator('.err').count()) >= 1, 'unknown # line is a C# error, not a command');
+
 // ---------- screenshots ----------
 await page.evaluate(() => window.monaco.editor.getEditors()[0].setValue('var squares = Enumerable.Range(1, 5).Select(i => i * i);\n'));
 await page.click('#editor .monaco-editor .view-lines');

@@ -17,7 +17,7 @@ main { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .copy:hover, .copy:focus-visible { background: #3a3e46; color: #fff; opacity: 1; }
 .copy.done { color: #6fdc8c; opacity: 1; }
 .copy svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-.block { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 4px; padding: 8px 14px; border-radius: 6px; }
+.block { position: relative; white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 4px; padding: 8px 44px 8px 14px; border-radius: 6px; }
 .out { background: var(--out); color: #cfcfcf; }
 .val { background: var(--val); color: #ce9178; }
 .err { background: var(--err); color: #f48771; }
@@ -47,6 +47,7 @@ button:disabled { background: #444; cursor: default; }
   #transcript { padding: 8px 10px; font-size: 12px; }
   #input { padding: 6px 10px 0; }
   .code { padding: 8px 42px 8px 10px; }
+  .block { padding-right: 42px; }
   .copy { width: 36px; height: 36px; top: 2px; right: 2px; }
   .bar { padding: 6px 0 calc(6px + env(safe-area-inset-bottom)); }
   .bar .hint { display: none; }

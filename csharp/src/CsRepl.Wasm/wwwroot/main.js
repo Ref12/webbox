@@ -3,6 +3,8 @@ import { History } from './history.js';
 import { toHtml } from './classify.js';
 import { registerIntellisense } from './intellisense.js';
 import { brotliDecode } from './br.js';
+import { parseCommand, directiveSpans, handleCommand } from './commands.js';
+import { addCopyButton } from './copy.js';
 
 // BUILD and the two manifest URLs are rewritten by tools/stage.mjs (content hashes) when the site is staged for GitHub Pages.
 const BUILD = 'dev';
@@ -169,7 +171,7 @@ async function createEditor(host, onSubmit, history) {
       value: '', language: 'csharp', theme: 'vs-cs', minimap: { enabled: false }, automaticLayout: true, lineNumbers: 'off',
       glyphMargin: false, folding: false, lineDecorationsWidth: 8, renderLineHighlight: 'none', overviewRulerLanes: 0, scrollBeyondLastLine: false,
       fontSize: 13, fontFamily: '"Cascadia Code", "Cascadia Mono", ui-monospace, Menlo, Consolas, monospace', padding: { top: 8, bottom: 8 },
-      'semanticHighlighting.enabled': true, bracketPairColorization: { enabled: false }, matchBrackets: 'never', quickSuggestions: { other: true, comments: false, strings: false }, fixedOverflowWidgets: true,
+      'semanticHighlighting.enabled': true, bracketPairColorization: { enabled: false }, matchBrackets: 'never', quickSuggestions: { other: true, comments: false, strings: true }, fixedOverflowWidgets: true,
       suggestOnTriggerCharacters: true, acceptSuggestionOnEnter: 'on', parameterHints: { enabled: true }, scrollbar: { alwaysConsumeMouseWheel: false },
     });
     // Enter = run (when the code is complete); Shift+Enter = newline (default). Plain Up/Down keep moving the cursor.
@@ -204,27 +206,27 @@ async function createEditor(host, onSubmit, history) {
 }
 
 // ---- transcript ----
-const COPY_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>';
-const CHECK_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 const entries = [];   // { code, codeEl, committed: index|null, coloured: bool }
-function addEntry(code) {
+function addEntry(code, spans) {
   const div = document.createElement('div'); div.className = 'entry';
   const box = document.createElement('div'); box.className = 'code';
   const pre = document.createElement('pre'); const codeEl = document.createElement('code'); codeEl.textContent = code; pre.appendChild(codeEl);
-  const copy = document.createElement('button'); copy.className = 'copy'; copy.type = 'button'; copy.title = 'Copy code'; copy.setAttribute('aria-label', 'Copy code'); copy.innerHTML = COPY_SVG;
-  copy.onclick = async () => {
-    try { await navigator.clipboard.writeText(code); }
-    catch { const ta = document.createElement('textarea'); ta.value = code; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
-    copy.classList.add('done'); copy.innerHTML = CHECK_SVG; window.__lastCopied = code;
-    setTimeout(() => { copy.classList.remove('done'); copy.innerHTML = COPY_SVG; }, 1200);
-  };
-  box.append(pre, copy); div.appendChild(box);
+  box.appendChild(pre);
+  addCopyButton(box, code, { title: 'Copy code', onCopied: (v) => (window.__lastCopied = v) });
+  div.appendChild(box);
   $('transcript').appendChild(div);
   const e = { code, codeEl, div, committed: null, coloured: false };
+  if (spans) { codeEl.innerHTML = toHtml(code, spans); e.coloured = true; e.command = true; }   // REPL command: coloured as a directive, never sent to Roslyn
   entries.push(e);
   return e;
 }
-function addBlock(div, cls, text) { const d = document.createElement('div'); d.className = cls; d.textContent = text; div.appendChild(d); return d; }
+// Output, return value and error blocks (cls has 'block') carry the same copy icon as the code blocks; it copies the block's plain text.
+function addBlock(div, cls, text) {
+  const d = document.createElement('div'); d.className = cls; d.textContent = text; div.appendChild(d);
+  if (/\bblock\b/.test(cls)) addCopyButton(d, text, { title: 'Copy ' + (/\berr\b/.test(cls) ? 'error' : /\bval\b/.test(cls) ? 'value' : 'output'), onCopied: (v) => (window.__lastCopied = v) });
+  return d;
+}
+let assemblyNames = [];   // framework assemblies for #r "..." completion (from ref/manifest.json)
 
 async function main() {
   const history = new History();
@@ -233,24 +235,23 @@ async function main() {
   window.__intelli = (op, text, pos, extra) => call(op, text, pos, extra);
 
   async function colour(e) {
-    if (!intelliReady || e.coloured) return;
+    if (!intelliReady || e.coloured || e.command) return;
     try {
       const spans = e.committed !== null ? await call('ClassifyCommitted', '', e.committed) : await call('Classify', e.code, 0);
-      if (spans) { e.codeEl.innerHTML = toHtml(e.code, spans); e.coloured = true; }
+      if (spans) { e.codeEl.innerHTML = toHtml(e.code, [...spans, ...directiveSpans(e.code)]); e.coloured = true; }
     } catch (err) { console.warn('classify failed', err); }
   }
 
-  async function submit(force) {
-    const code = editor.get();
-    if (!exportsRef || busy || !code.trim()) return;
-    if (!force && !exportsRef.Interop.IsComplete(code)) { editor.set(code + '\n'); return; } // incomplete: behave like a newline
-    busy = true; $('run').disabled = true;
-    history.add(code);
-    editor.set('');
+  // Runs C# (compile + run) and shows the result under its own transcript entry.
+  async function execute(code) {
     const entry = addEntry(code);
     // colour the submission in the context it will run in (before it joins the session chain)
     if (intelliReady) await colour(entry);
-    else if (monacoRef) monacoRef.editor.colorize(code, 'csharp', { tabSize: 4 }).then((h) => { if (!entry.coloured) entry.codeEl.innerHTML = h; });
+    else {
+      const dir = directiveSpans(code);
+      if (monacoRef) monacoRef.editor.colorize(code, 'csharp', { tabSize: 4 }).then((h) => { if (!entry.coloured) entry.codeEl.innerHTML = h; });
+      if (dir.length && !monacoRef) entry.codeEl.innerHTML = toHtml(code, dir);
+    }
     setStatus('running…');
     await new Promise((r) => setTimeout(r, 0)); // let the UI paint before the (synchronous, single-threaded) compile
     const logStart = assetLog.length;
@@ -268,7 +269,53 @@ async function main() {
     } else if (res.value != null) addBlock(entry.div, 'block val', res.value);
     addBlock(entry.div, 'ms', Math.round(total) + ' ms');
     $('transcript').scrollTop = $('transcript').scrollHeight;
-    setStatus('ready'); busy = false; $('run').disabled = false; editor.focus();
+    return entry;
+  }
+
+  function resetSession() {
+    exportsRef.Interop.Reset(); committedCount = 0; history.reset(); entries.forEach((e) => (e.committed = null));
+    $('transcript').appendChild(Object.assign(document.createElement('div'), { className: 'note', textContent: '— session reset —' }));
+  }
+
+  // #help, #clear / clear, #reset, #load "url": handled here, never compiled
+  async function runCommand(code, cmd) {
+    let entry = null;
+    const own = () => (entry ||= addEntry(code, cmd.spans));
+    await handleCommand(cmd, {
+      print: (text) => addBlock(own().div, 'block out', text),
+      error: (text) => addBlock(own().div, 'block err', text),
+      clearTranscript: () => {
+        $('transcript').replaceChildren();
+        $('transcript').appendChild(Object.assign(document.createElement('div'), { className: 'note', textContent: 'transcript cleared · variables, usings and references are kept · #reset forgets them too' }));
+      },
+      resetSession: () => { own(); resetSession(); },
+      loadScript: async (url) => {
+        const e = own();
+        setStatus('loading ' + url + '…');
+        let text;
+        try {
+          const resp = await fetch(url);
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          text = await resp.text();
+          if (text.length > 1048576) throw new Error('the script is larger than 1 MB');
+        } catch (err) { addBlock(e.div, 'block err', '#load "' + url + '": ' + err.message + (/Failed to fetch|NetworkError|Load failed/.test(err.message) ? ' (the server must allow cross-origin requests, e.g. raw.githubusercontent.com does)' : '')); return; }
+        addBlock(e.div, 'load', '↓ ' + url + ' · ' + (text.length / 1024).toFixed(1) + ' KB');
+        await execute(text);
+      },
+    });
+    $('transcript').scrollTop = $('transcript').scrollHeight;
+  }
+
+  async function submit(force) {
+    const code = editor.get();
+    if (!exportsRef || busy || !code.trim()) return;
+    const cmd = parseCommand(code);
+    if (!cmd && !force && !exportsRef.Interop.IsComplete(code)) { editor.set(code + '\n'); return; } // incomplete: behave like a newline
+    busy = true; $('run').disabled = true;
+    history.add(code);
+    editor.set('');
+    try { if (cmd) await runCommand(code, cmd); else await execute(code); }
+    finally { setStatus('ready'); busy = false; $('run').disabled = false; editor.focus(); }
   }
   window.__submit = async (code) => { editor.set(code); await submit(true); };
 
@@ -276,7 +323,7 @@ async function main() {
   mark('editorReady');
   if (monacoRef) {
     intelli = registerIntellisense(monacoRef, {
-      call, ready: () => intelliReady,
+      call, ready: () => intelliReady, assemblies: () => assemblyNames,
       onStats: (name, ms) => { if (name === 'completion') metrics.completion.push(Math.round(ms)); (metrics.latency ||= {})[name] = Math.round(ms); },
     });
     intelli.attach(editor.model);
@@ -290,16 +337,14 @@ async function main() {
   mark('runtimeCreated');
   exportsRef = await getAssemblyExports(getConfig().mainAssemblyName);
   mark('exportsReady');
-  $('reset').onclick = () => {
-    exportsRef.Interop.Reset(); committedCount = 0; history.reset(); entries.forEach((e) => (e.committed = null));
-    $('transcript').appendChild(Object.assign(document.createElement('div'), { className: 'note', textContent: '— session reset —' }));
-  };
+  $('reset').onclick = () => resetSession();
 
   // reference assemblies: manifest (small) + the core bundle (one request); everything else on demand
   setStatus('loading reference assemblies…');
   const mf = await (await fetch(MANIFESTS.ref)).text();
   refVersion = JSON.parse(mf).version;
   registerHashes('ref', JSON.parse(mf));
+  assemblyNames = JSON.parse(mf).assemblies.map((a) => a.name.replace(/\.dll$/i, ''));
   for (const k of await caches.keys()) if (k.startsWith('csrepl-refs-') && k !== 'csrepl-refs-' + refVersion) await caches.delete(k);
   const core = await getBytes('ref/core.bin', 'csrepl-refs-' + refVersion);
   metrics.coreBundle = { bytes: core.bytes.length, from: core.from, ms: Math.round(core.ms) };

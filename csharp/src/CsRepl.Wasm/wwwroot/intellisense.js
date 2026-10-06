@@ -1,5 +1,7 @@
 // Wires the Roslyn services (running in the .NET wasm app, see Interop.Intelli) to Monaco's providers.
 import { TYPES, toSemanticTokens } from './classify.js';
+import { parseCommand, directiveSpans } from './commands.js';
+import { completeR, createNuGetClient, rContext } from './rcomplete.js';
 
 const KIND = { Class: 'Class', Struct: 'Struct', Interface: 'Interface', Enum: 'Enum', EnumMember: 'EnumMember', Delegate: 'Class',
   Method: 'Method', ExtensionMethod: 'Method', Property: 'Property', Field: 'Field', Local: 'Variable', Parameter: 'Variable',
@@ -8,16 +10,36 @@ const KIND = { Class: 'Class', Struct: 'Struct', Interface: 'Interface', Enum: '
 const DEFAULT_COMMIT = ['.', '(', '[', ';', ','];
 
 /** call(op, text, pos, extra) -> Promise<object|null> ; ready() -> bool ; stats collects timings. */
-export function registerIntellisense(monaco, { call, ready, onStats }) {
+export function registerIntellisense(monaco, { call, ready, onStats, assemblies, nuget = createNuGetClient() }) {
   const K = monaco.languages.CompletionItemKind;
   const changeListeners = [];
   const timed = async (name, f) => { const t = performance.now(); const r = await f(); onStats?.(name, performance.now() - t); return r; };
+
+  // #r "..." : `nuget: `, package names and versions from nuget.org, framework assemblies. Needs no Roslyn, so it works before IntelliSense is ready.
+  const RK = { nuget: K.Keyword, package: K.Module, version: K.Value, assembly: K.Reference };
+  monaco.languages.registerCompletionItemProvider('csharp', {
+    triggerCharacters: ['"', ':', ' ', ',', '.'],
+    async provideCompletionItems(model, position) {
+      const text = model.getValue(), pos = model.getOffsetAt(position);
+      if (!rContext(text, pos)) return { suggestions: [] };
+      const res = await timed('rcompletion', () => completeR(text, pos, { nuget, assemblies }));
+      if (!res || model.getValue() !== text) return { suggestions: [] };
+      const retrigger = { id: 'editor.action.triggerSuggest', title: '' };
+      return { suggestions: res.items.map((i) => {
+        const a = model.getPositionAt(i.start);
+        return { label: i.label, kind: RK[i.kind] ?? K.Text, insertText: i.insertText, filterText: i.label, sortText: i.sortText, detail: i.detail,
+          range: new monaco.Range(a.lineNumber, a.column, position.lineNumber, position.column),
+          command: i.kind === 'nuget' || i.kind === 'package' ? retrigger : undefined };   // after `nuget: ` offer packages, after a package offer versions
+      }) };
+    },
+  });
 
   monaco.languages.registerCompletionItemProvider('csharp', {
     triggerCharacters: ['.'],
     async provideCompletionItems(model, position, context) {
       if (!ready()) return { suggestions: [] };
       const text = model.getValue(), pos = model.getOffsetAt(position);
+      if (rContext(text, pos)) return { suggestions: [] };
       const trigger = context.triggerKind === monaco.languages.CompletionTriggerKind.TriggerCharacter ? context.triggerCharacter : '';
       const res = await timed('completion', () => call('Complete', text, pos, trigger));
       if (!res) return { suggestions: [] };
@@ -68,7 +90,7 @@ export function registerIntellisense(monaco, { call, ready, onStats }) {
       if (!ready()) return null;
       const text = model.getValue();
       const spans = await timed('classify', () => call('Classify', text, 0, ''));
-      return spans ? { data: toSemanticTokens(text, spans) } : null;
+      return spans ? { data: toSemanticTokens(text, [...spans, ...directiveSpans(text)]) } : null;
     },
     releaseDocumentSemanticTokens() {},
   });
@@ -81,6 +103,7 @@ export function registerIntellisense(monaco, { call, ready, onStats }) {
     timer = setTimeout(async () => {
       if (!ready() || model.isDisposed()) return;
       const text = model.getValue();
+      if (parseCommand(text)) { monaco.editor.setModelMarkers(model, 'roslyn', []); return; }   // #help, #clear...: not C#
       const ds = (await timed('diagnostics', () => call('Diagnostics', text, 0, ''))) || [];
       if (model.getValue() !== text) return;   // stale
       monaco.editor.setModelMarkers(model, 'roslyn', ds.map((d) => {
