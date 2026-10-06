@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const runner = process.env.JIT_RUNNER || path.join(here, 'JitRunner', 'bin', 'Release', 'net10.0', 'JitRunner.dll');
 const port = Number(process.argv[2] ?? process.env.PORT ?? 8787);
-const origin = process.env.ALLOW_ORIGIN ?? '*';          // set to https://ref12labs.github.io to lock it to the app
+const origin = process.env.ALLOW_ORIGIN ?? '*';          // set to https://ref12.github.io to lock it to the app
 const MAX_BODY = 2 * 1024 * 1024, TIMEOUT_MS = 15000, MAX_CONCURRENT = 2, MAX_OUTPUT = 4 * 1024 * 1024;
 let running = 0;
 

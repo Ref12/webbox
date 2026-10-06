@@ -1,5 +1,5 @@
 // Live relink-vs-AOT measurement: node live-aot.mjs <base> [csharp|sharplab|all] [runs=1]
-//   <base> e.g. https://webbox.ref12cf.workers.dev | https://ref12labs.github.io/webbox | http://localhost:8199/webbox (pages-sim, to try the script)
+//   <base> e.g. https://webbox.ref12cf.workers.dev | https://ref12.github.io/webbox | http://localhost:8199/webbox (pages-sim, to try the script)
 // For each app and build (relink = ?aot=0, AOT = ?aot=1, each in a fresh browser context, so a cold cache): download size (all requests of the
 // page and its workers, bytes on the wire), first result, IntelliSense ready, warm compile (median of 5 distinct edits), CPU-bound snippet.
 import { chromium } from 'playwright-core';

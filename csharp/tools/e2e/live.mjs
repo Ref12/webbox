@@ -1,4 +1,4 @@
-// Live check of a deployed host.  node live.mjs <baseUrl e.g. https://webbox.ref12cf.workers.dev | https://ref12labs.github.io/webbox> <csharp|fuget|sharplab|hexad|all>
+// Live check of a deployed host.  node live.mjs <baseUrl e.g. https://webbox.ref12cf.workers.dev | https://ref12.github.io/webbox> <csharp|fuget|sharplab|hexad|all>
 import { chromium } from 'playwright-core';
 import fs from 'node:fs';
 const base = process.argv[2].replace(/\/$/, ''), which = process.argv[3] || 'all';

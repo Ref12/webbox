@@ -1,12 +1,11 @@
 name: Deploy (GitHub Pages + Cloudflare Worker)
 
-# Two targets from one build: GitHub Pages (hexad must stay at ref12labs.github.io/webbox/hexad/) and the Cloudflare Worker `webbox`
+# Ref12/webbox: public web tools. Two targets from one build: GitHub Pages (ref12.github.io/webbox/) and the Cloudflare Worker `webbox`
 # (static assets, wrangler.jsonc; secrets CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID; https://webbox.<account>.workers.dev/). The C# REPL is built once;
 # stage.mjs --target=pages|cloudflare makes the two copies. Every app in this repository is static: each folder is published as it is, no build step,
 # except the .NET WebAssembly apps csharp/ (C# REPL), fuget/ (NuGet package browser) and sharplab/ (SharpLab-style playground):
 # their sources are not copied; each is built (reference-assembly prep + dotnet publish, no workloads; relink via build/NoWorkloadWasm.props) and staged at /csharp/, /fuget/ and /sharplab/.
 # sharplab/tools/stage.mjs is the Pages-style staging (.br decoded in the page), used for both targets; --target=cloudflare adds the 25 MiB per-file check.
-# hexad's remote app lives in the hexad repository (web/remote) and is published here at /hexad/.
 on:
   push:
     branches: [main]
@@ -73,15 +72,6 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      # Read-only deploy key on Ref12/hexad; the branch is the repository variable HEXAD_REF (default main).
-      - uses: actions/checkout@v4
-        with:
-          repository: Ref12/hexad
-          ref: ${{ vars.HEXAD_REF || 'main' }}
-          ssh-key: ${{ secrets.HEXAD_DEPLOY_KEY }}
-          path: _hexad
-          sparse-checkout: web/remote
-          sparse-checkout-cone-mode: false
       - uses: actions/configure-pages@v5
       - uses: actions/setup-dotnet@v4
         with:
@@ -131,9 +121,7 @@ jobs:
       - name: Stage the site
         run: |
           mkdir -p _site
-          rsync -a --exclude '.git' --exclude '.github' --exclude '_site' --exclude '_hexad' --exclude '/csharp' --exclude '/sharplab' --exclude 'README.md' ./ _site/
-          mkdir -p _site/hexad
-          rsync -a --delete --exclude 'README.md' _hexad/web/remote/ _site/hexad/
+          rsync -a --exclude '.git' --exclude '.github' --exclude '_site' --exclude '/csharp' --exclude '/sharplab' --exclude 'README.md' ./ _site/
           # csharp/ -> _site/csharp/: app files with content-hashed names, big binaries only as .br (decoded in the page; Pages cannot send Content-Encoding for them)
           node csharp/tools/stage.mjs csharp/dist/wwwroot _site/csharp --target=pages --aot=csharp/dist-aot/wwwroot
           # fuget: publish output replaces the copied sources
@@ -143,9 +131,7 @@ jobs:
       - name: Stage the Cloudflare site
         run: |
           # same apps, but csharp/ without .br files or decoder: the edge compresses; _headers gives COOP/COEP, caching and Content-Types
-          rsync -a --exclude '.git' --exclude '.github' --exclude '_site' --exclude '_cf_site' --exclude '_hexad' --exclude '/csharp' --exclude '/sharplab' --exclude 'README.md' --exclude 'wrangler.jsonc' ./ _cf_site/
-          mkdir -p _cf_site/hexad
-          rsync -a --delete --exclude 'README.md' _hexad/web/remote/ _cf_site/hexad/
+          rsync -a --exclude '.git' --exclude '.github' --exclude '_site' --exclude '_cf_site' --exclude '/csharp' --exclude '/sharplab' --exclude 'README.md' --exclude 'wrangler.jsonc' ./ _cf_site/
           node csharp/tools/stage.mjs csharp/dist/wwwroot _cf_site/csharp --target=cloudflare --mt=csharp/dist-mt/wwwroot --aot=csharp/dist-aot/wwwroot
           rm -rf _cf_site/fuget && mkdir -p _cf_site/fuget && cp -r fuget/dist/wwwroot/. _cf_site/fuget/
           node sharplab/tools/stage.mjs sharplab/dist/wwwroot _cf_site/sharplab --target=cloudflare --aot=sharplab/dist-aot/wwwroot
