@@ -17,7 +17,9 @@ for(let i=0;i<rest.length;i+=2){
   const dll=fs.readFileSync(rest[i]).toString('base64'), m=rest[i+1]; n++;
   const s=now(); const tag='END'+n+'MARK';
   const chunks=dll.match(/.{1,1000}/g); let cmd='rm -f /t.b64\n'; for(const c of chunks) cmd+='printf %s '+c+' >> /t.b64\n';
-  cmd+=`base64 -d /t.b64 > /app/app.dll; DOTNET_JitDisasm=${m} dotnet /app/app.dll; echo E${'ND'}${n}MARK\n`;
+  if(process.env.SKIPUP) cmd='';
+  else cmd+='base64 -d /t.b64 > /app/app.dll; ';
+  cmd+=` DOTNET_JitDisasm=${m} dotnet /app/app.dll; echo E${'ND'}${n}MARK\n`;
   await pg.evaluate(c=>xterm.paste(c.replace(/\n/g,'\r')),cmd);
   // wait for the echoed marker on its own line (not the command line)
   await until(new RegExp('^END'+n+'MARK','m'));
