@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SharpLab on WebAssembly — C# syntax, IL, lowered C#, run, verify</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header>
+  <strong>SharpLab</strong><span class="dim"> on .NET WebAssembly &mdash; everything runs in this page</span>
+  <span class="opts">
+    <label>Config <select id="cfg"><option value="release">Release</option><option value="debug">Debug</option></select></label>
+    <label><input type="checkbox" id="opt" checked> Optimize</label>
+    <label>C# <select id="lang"></select></label>
+    <button id="share" title="Copy a link with the code and options in the URL fragment">Share link</button>
+  </span>
+  <span id="status" class="status">loading&hellip;</span>
+</header>
+<main>
+  <section id="left">
+    <div id="editor"></div>
+    <div id="problems" class="problems" aria-live="polite"></div>
+  </section>
+  <section id="right">
+    <nav id="tabs" role="tablist">
+      <button role="tab" data-tab="syntax">Syntax</button>
+      <button role="tab" data-tab="il">IL</button>
+      <button role="tab" data-tab="cs" class="on">C#</button>
+      <button role="tab" data-tab="run">Run</button>
+      <button role="tab" data-tab="verify">Verify</button>
+      <button role="tab" data-tab="jit">JIT asm</button>
+      <span id="levelwrap" class="level"><label>Decompile <select id="level" title="How high-level the decompiled C# is">
+        <option value="1">1 · nearly raw IL</option><option value="2" selected>2 · lowered</option><option value="3">3 · high-level</option></select></label></span>
+    </nav>
+    <div id="panes">
+      <div class="pane" id="pane-syntax"><div id="tree" class="tree"></div></div>
+      <div class="pane" id="pane-il"><div id="out-il" class="outhost"></div></div>
+      <div class="pane on" id="pane-cs"><div id="out-cs" class="outhost"></div></div>
+      <div class="pane" id="pane-run">
+        <div class="bar"><button id="runbtn" disabled>&#9654; Run</button><span id="runinfo" class="dim"></span></div>
+        <pre id="runout" class="runout"></pre>
+      </div>
+      <div class="pane" id="pane-verify"><div id="verifyout" class="verify"></div></div>
+      <div class="pane" id="pane-jit"><div id="jit" class="jit"></div></div>
+    </div>
+  </section>
+</main>
+<script type="module" src="main.js"></script>
+</body>
+</html>

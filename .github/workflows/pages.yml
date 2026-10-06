@@ -3,8 +3,9 @@ name: Deploy (GitHub Pages + Cloudflare Worker)
 # Two targets from one build: GitHub Pages (hexad must stay at ref12labs.github.io/webbox/hexad/) and the Cloudflare Worker `webbox`
 # (static assets, wrangler.jsonc; secrets CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID; https://webbox.<account>.workers.dev/). The C# REPL is built once;
 # stage.mjs --target=pages|cloudflare makes the two copies. Every app in this repository is static: each folder is published as it is, no build step,
-# except csharp/ (C# REPL on .NET WebAssembly): its source is not copied; it is built (reference-assembly prep + dotnet publish)
-# and tools/stage.mjs puts the result at _site/csharp/.
+# except the .NET WebAssembly apps csharp/ (C# REPL), fuget/ (NuGet package browser) and sharplab/ (SharpLab-style playground):
+# their sources are not copied; each is built (reference-assembly prep + dotnet publish, no workloads) and staged at /csharp/, /fuget/ and /sharplab/.
+# sharplab/tools/stage.mjs is the Pages-style staging (.br decoded in the page), used for both targets.
 # hexad's remote app lives in the hexad repository (web/remote) and is published here at /hexad/.
 on:
   push:
@@ -64,25 +65,34 @@ jobs:
           dotnet run tools/PrepareRefs.cs        # reference pack -> wwwroot/ref (decompiler references, on demand)
           dotnet publish src/Fuget.Wasm -c Release -o dist
       # --- end fuget ---
+      - name: Build SharpLab
+        working-directory: sharplab
+        run: |
+          # restores Microsoft.NETCore.App.Ref (the reference assemblies PrepareRefs.cs packs) into the NuGet cache
+          dotnet restore tests/SharpLab.Tests
+          dotnet run tools/PrepareRefs.cs
+          dotnet publish src/SharpLab.Wasm -c Release -o dist
       - name: Stage the site
         run: |
           mkdir -p _site
-          rsync -a --exclude '.git' --exclude '.github' --exclude '_site' --exclude '_hexad' --exclude '/csharp' --exclude 'README.md' ./ _site/
+          rsync -a --exclude '.git' --exclude '.github' --exclude '_site' --exclude '_hexad' --exclude '/csharp' --exclude '/sharplab' --exclude 'README.md' ./ _site/
           mkdir -p _site/hexad
           rsync -a --delete --exclude 'README.md' _hexad/web/remote/ _site/hexad/
           # csharp/ -> _site/csharp/: app files with content-hashed names, big binaries only as .br (decoded in the page; Pages cannot send Content-Encoding for them)
           node csharp/tools/stage.mjs csharp/dist/wwwroot _site/csharp --target=pages
           # fuget: publish output replaces the copied sources
           rm -rf _site/fuget && mkdir -p _site/fuget && cp -r fuget/dist/wwwroot/. _site/fuget/
+          node sharplab/tools/stage.mjs sharplab/dist/wwwroot _site/sharplab
           touch _site/.nojekyll
       - name: Stage the Cloudflare site
         run: |
           # same apps, but csharp/ without .br files or decoder: the edge compresses; _headers gives COOP/COEP, caching and Content-Types
-          rsync -a --exclude '.git' --exclude '.github' --exclude '_site' --exclude '_cf_site' --exclude '_hexad' --exclude '/csharp' --exclude 'README.md' --exclude 'wrangler.jsonc' ./ _cf_site/
+          rsync -a --exclude '.git' --exclude '.github' --exclude '_site' --exclude '_cf_site' --exclude '_hexad' --exclude '/csharp' --exclude '/sharplab' --exclude 'README.md' --exclude 'wrangler.jsonc' ./ _cf_site/
           mkdir -p _cf_site/hexad
           rsync -a --delete --exclude 'README.md' _hexad/web/remote/ _cf_site/hexad/
           node csharp/tools/stage.mjs csharp/dist/wwwroot _cf_site/csharp --target=cloudflare --mt=csharp/dist-mt/wwwroot
           rm -rf _cf_site/fuget && mkdir -p _cf_site/fuget && cp -r fuget/dist/wwwroot/. _cf_site/fuget/
+          node sharplab/tools/stage.mjs sharplab/dist/wwwroot _cf_site/sharplab
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
