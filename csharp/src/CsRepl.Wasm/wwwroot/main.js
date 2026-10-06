@@ -302,7 +302,7 @@ async function main() {
   try {
     setBadge('IntelliSense: starting runtime…', 'loading');
     intelliW.start();
-    await intelliW.request('init', { threads: false, aot: AOT });   // IntelliSense never needs threads
+    await intelliW.request('init', { threads: false, aot: false });   // IntelliSense never needs threads, and always runs on the relink build (Roslyn Features does not survive the AOT build's trimming)
     await intelliW.request('loadIntellisense');
     for (const c of log.codes) await intelliW.request('track', { code: c });   // submissions made before it was ready
     intelliReady = true;
