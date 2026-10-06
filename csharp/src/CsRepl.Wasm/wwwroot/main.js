@@ -279,7 +279,7 @@ async function main() {
   let useThreads = THREADS, info;
   if (THREADS) {
     // Experimental: .NET 10's threaded runtime does not start inside a Web Worker (see README); fall back to the normal runtime instead of hanging.
-    info = await Promise.race([exec.request('init', { threads: true }).catch((e) => ({ failed: String(e.message) })), new Promise((r) => setTimeout(() => r({ failed: 'timeout' }), 40000))]);
+    info = await Promise.race([exec.request('init', { threads: true }).catch((e) => ({ failed: String(e.message) })), new Promise((r) => setTimeout(() => r({ failed: 'timeout' }), 15000))]);
     if (info.failed) {
       console.warn('threads=1: the threaded runtime did not start in the worker (' + info.failed + '); using the normal runtime');
       metrics.threadsFailed = info.failed; useThreads = false;

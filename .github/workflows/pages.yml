@@ -1,6 +1,8 @@
-name: Deploy to GitHub Pages
+name: Deploy (GitHub Pages + Cloudflare Worker)
 
-# Every app in this repository is static: each folder is published as it is, no build step,
+# Two targets from one build: GitHub Pages (hexad must stay at ref12labs.github.io/webbox/hexad/) and the Cloudflare Worker `webbox`
+# (static assets, wrangler.jsonc; secrets CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID; https://webbox.<account>.workers.dev/). The C# REPL is built once;
+# stage.mjs --target=pages|cloudflare makes the two copies. Every app in this repository is static: each folder is published as it is, no build step,
 # except csharp/ (C# REPL on .NET WebAssembly): its source is not copied; it is built (reference-assembly prep + dotnet publish)
 # and tools/stage.mjs puts the result at _site/csharp/.
 # hexad's remote app lives in the hexad repository (web/remote) and is published here at /hexad/.
@@ -21,6 +23,8 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -51,6 +55,8 @@ jobs:
           dotnet run tools/PrepareRefs.cs
           dotnet run tools/PrepareLazy.cs
           dotnet publish src/CsRepl.Wasm -c Release -o dist
+          # experimental multithreaded runtime, only reachable with ?threads=1
+          dotnet publish src/CsRepl.Wasm -c Release -p:Threads=true -p:IntermediateOutputPath=obj/mt/ -o dist-mt
       - name: Stage the site
         run: |
           mkdir -p _site
@@ -58,10 +64,23 @@ jobs:
           mkdir -p _site/hexad
           rsync -a --delete --exclude 'README.md' _hexad/web/remote/ _site/hexad/
           # csharp/ -> _site/csharp/: app files with content-hashed names, big binaries only as .br (decoded in the page; Pages cannot send Content-Encoding for them)
-          node csharp/tools/stage.mjs csharp/dist/wwwroot _site/csharp
+          node csharp/tools/stage.mjs csharp/dist/wwwroot _site/csharp --target=pages
           touch _site/.nojekyll
+      - name: Stage the Cloudflare site
+        run: |
+          # same apps, but csharp/ without .br files or decoder: the edge compresses; _headers gives COOP/COEP, caching and Content-Types
+          rsync -a --exclude '.git' --exclude '.github' --exclude '_site' --exclude '_cf_site' --exclude '_hexad' --exclude '/csharp' --exclude 'README.md' --exclude 'wrangler.jsonc' ./ _cf_site/
+          mkdir -p _cf_site/hexad
+          rsync -a --delete --exclude 'README.md' _hexad/web/remote/ _cf_site/hexad/
+          node csharp/tools/stage.mjs csharp/dist/wwwroot _cf_site/csharp --target=cloudflare --mt=csharp/dist-mt/wwwroot
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
       - id: deployment
         uses: actions/deploy-pages@v4
+      - name: Deploy the Cloudflare Worker (static assets)
+        # the first run creates the Worker `webbox`; nothing to set up by hand. A new app is a new folder.
+        if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes wrangler@4 deploy

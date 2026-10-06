@@ -37,3 +37,6 @@ desktop.ini
 
 # local stage of the Pages site
 _site/
+_cf_site/
+csharp/dist-mt/
+csharp/obj/
