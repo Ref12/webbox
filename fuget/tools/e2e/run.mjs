@@ -103,6 +103,7 @@ await page.goto(base + '#/');
 await page.fill('#q', 'humanizer');
 await page.waitForSelector('#suggest a', { timeout: 30000 });
 assert.ok((await page.locator('#suggest a').allInnerTexts()).some((t) => /humanizer/i.test(t)), 'autocomplete from nuget.org');
+await page.fill('#q', 'json serializer');
 await page.keyboard.press('Enter');
 await page.waitForSelector('.card', { timeout: 30000 });
 assert.ok(await page.locator('.card').count() > 3, 'search results');
