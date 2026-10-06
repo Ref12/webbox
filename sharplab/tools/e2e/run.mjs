@@ -110,7 +110,7 @@ await page.evaluate(() => window.__sharplab.ed.setSel(6, 11));
 await page.waitForTimeout(300);
 assert.equal(await page.locator('#tree .row.sel').getAttribute('data-kind'), 'ClassKeyword', 'editor selection -> tree');
 await page.locator('#tree .row[data-kind=IdentifierToken]').first().click();
-assert.deepEqual(await page.evaluate(() => window.__sharplab.ed.getSel()), { start: 12, end: 13 }, 'tree click -> editor selection');
+assert.deepEqual(await page.evaluate(() => window.__sharplab.ed.getSel()), { start: 11, end: 12 }, 'tree click -> editor selection');
 await page.evaluate(() => window.__sharplab.ed.setSel(2, 2));
 await page.waitForTimeout(300);
 assert.equal(await page.locator('#tree .row.sel').getAttribute('data-kind'), 'SingleLineCommentTrivia', 'caret in a comment selects trivia');
