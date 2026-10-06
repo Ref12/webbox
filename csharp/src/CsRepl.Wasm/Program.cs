@@ -19,6 +19,8 @@ public static partial class Interop
     // ---- host (JS) callbacks: fetch a site asset or URL; JS caches in the Cache API and reports what it loaded ----
     [JSImport("fetchAsset", "host")]
     private static partial Task FetchAssetJs(string path);          // fetches (cache first) and parks the bytes on the JS side
+    [JSImport("write", "host")]
+    private static partial void WriteJs(string text);              // streamed Console output (JS batches it and posts it to the page)
     [JSImport("takeAsset", "host")]
     private static partial byte[] TakeAssetJs(string path);         // hands them over (Task<byte[]> is not marshalled)
 
@@ -56,7 +58,7 @@ public static partial class Interop
     [JSExport]
     public static async Task<string> Submit(string code)
     {
-        _session ??= new ReplSession(Refs, _resolver, _nuget);
+        _session ??= new ReplSession(Refs, _resolver, _nuget) { Output = WriteJs };
         var r = await _session.SubmitAsync(code);
         if (r.Success)
         {
@@ -69,6 +71,19 @@ public static partial class Interop
             }
         }
         return JsonSerializer.Serialize(r, Json);
+    }
+
+    /// <summary>IntelliSense worker: follows the session without running it. Loads the references the submission needs and commits it to the workspace.</summary>
+    [JSExport]
+    public static async Task Track(string code)
+    {
+        _session ??= new ReplSession(Refs, _resolver, _nuget);
+        var loaded = await _session.LoadReferencesAsync(code);
+        var clean = Directives.Extract(code).Code;
+        _committed.Add(clean);
+        if (!_intelliReady) return;
+        if (loaded.Count > 0) Bridge("SetReferences", Refs.References);
+        Bridge("Commit", clean);
     }
 
     // ---- IntelliSense: Microsoft.CodeAnalysis.Features & co. arrive after first paint, as plain assemblies ----

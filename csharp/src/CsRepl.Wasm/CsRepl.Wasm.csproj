@@ -9,6 +9,8 @@
     <!-- Interpreter only (no AOT), single-threaded, no native relink => no wasm-tools workload needed. -->
     <RunAOTCompilation>false</RunAOTCompilation>
     <WasmEnableThreads>false</WasmEnableThreads>
+    <!-- dotnet publish -p:Threads=true: the experimental multithreaded runtime (needs COOP/COEP; shipped behind ?threads=1) -->
+    <WasmEnableThreads Condition="'$(Threads)' == 'true'">true</WasmEnableThreads>
     <PublishTrimmed>false</PublishTrimmed>
     <WasmDebugLevel>0</WasmDebugLevel>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>

@@ -50,6 +50,28 @@ public sealed class ReplSession
 
     public int SubmissionCount { get; private set; }
 
+    /// <summary>Called with every piece of Console output while a submission runs (the UI streams it; the full text is still in the result).</summary>
+    public Action<string>? Output { get; set; }
+
+    private sealed class SinkWriter(Action<string>? sink) : StringWriter
+    {
+        public override void Write(char value) { base.Write(value); sink?.Invoke(value.ToString()); }
+        public override void Write(string? value) { base.Write(value); if (value is { Length: > 0 }) sink?.Invoke(value); }
+        public override void Write(char[] buffer, int index, int count) { base.Write(buffer, index, count); sink?.Invoke(new string(buffer, index, count)); }
+        public override void Write(ReadOnlySpan<char> buffer) { base.Write(buffer); if (buffer.Length > 0) sink?.Invoke(buffer.ToString()); }
+        public override void WriteLine(string? value) { base.WriteLine(value); sink?.Invoke((value ?? "") + NewLine); }
+    }
+
+    /// <summary>Loads what a submission's #r directives and usings need, without compiling it (the IntelliSense side tracks the session this way).</summary>
+    public async Task<IReadOnlyList<string>> LoadReferencesAsync(string code)
+    {
+        var loaded = new List<string>();
+        var (clean, rdirs) = Directives.Extract(code);
+        foreach (var d in rdirs) await LoadDirectiveAsync(d, loaded);
+        if (_resolver is not null) await _resolver.LoadForUsingsAsync(clean, loaded);
+        return loaded;
+    }
+
     /// <summary>Quick syntax check so a UI can tell "incomplete, keep typing" from "ready to run".</summary>
     public static bool IsCompleteSubmission(string code) =>
         SyntaxFactory.IsCompleteSubmission(CSharpSyntaxTree.ParseText(code,
@@ -59,7 +81,7 @@ public sealed class ReplSession
     {
         await _gate.WaitAsync();
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var stdout = new StringWriter();
+        var stdout = new SinkWriter(Output);
         var oldOut = Console.Out; var oldErr = Console.Error;
         ResolveEventHandler resolver = (_, a) => _loaded.TryGetValue(new AssemblyName(a.Name).Name ?? "", out var asm) ? asm : null;
         AppDomain.CurrentDomain.AssemblyResolve += resolver;
