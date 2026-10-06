@@ -1,83 +1,84 @@
 {
  "cold": {
   "marks": {
-   "editorReady": 588,
-   "runtimeCreated": 1702,
-   "exportsReady": 1730,
-   "refsReady": 1910,
-   "firstResult": 2771,
-   "intellisenseReady": 5090
+   "editorReady": 419,
+   "runtimeCreated": 1395,
+   "exportsReady": 1411,
+   "refsReady": 3134,
+   "firstResult": 3691,
+   "intellisenseReady": 5237
   },
-  "firstResultMs": 861,
-  "firstCompletionMs": 936,
+  "firstResultMs": 556,
+  "firstCompletionMs": 599,
   "lazy": {
    "files": 17,
    "rawBytes": 14492840,
-   "wireBytesBr": 4231966,
+   "wireBytesBr": 4231957,
    "fromCache": 0,
-   "downloadMs": 310,
-   "startMs": 1035
+   "downloadMs": 257,
+   "startMs": 654
   },
   "coreBundle": {
    "bytes": 1204157,
    "from": "network",
-   "ms": 29
+   "ms": 1626
   },
   "wireBytesAtFirstResult": {
-   "framework": 9809778,
-   "ref": 273213,
+   "framework": 9825936,
+   "ref": 275391,
    "lazy": 0,
-   "other": 11380,
+   "other": 232100,
    "cdn": 1066693
   },
   "wireBytesTotalAfterIntelliSense": {
-   "framework": 9809778,
-   "ref": 332474,
-   "lazy": 4232357,
-   "other": 11380,
-   "cdn": 4134766
+   "framework": 9825936,
+   "ref": 339106,
+   "lazy": 4232583,
+   "other": 232100,
+   "cdn": 4136255
   }
  },
  "warm": {
   "marks": {
-   "editorReady": 204,
-   "runtimeCreated": 1136,
-   "exportsReady": 1146,
-   "refsReady": 1247,
-   "firstResult": 1994,
-   "intellisenseReady": 3912
+   "editorReady": 171,
+   "runtimeCreated": 385,
+   "exportsReady": 392,
+   "refsReady": 469,
+   "firstResult": 980,
+   "intellisenseReady": 2244
   },
   "lazy": {
    "files": 17,
    "rawBytes": 14492840,
    "wireBytesBr": 0,
    "fromCache": 17,
-   "downloadMs": 81,
-   "startMs": 777
+   "downloadMs": 37,
+   "startMs": 507
   },
   "coreBundle": {
    "bytes": 1204157,
    "from": "cache",
-   "ms": 4
+   "ms": 3
   },
-  "firstCompletionMs": 1025,
+  "firstCompletionMs": 684,
   "wireBytes": {
-   "framework": 9809748,
-   "ref": 2794,
-   "lazy": 391,
-   "other": 11380,
+   "framework": 114545,
+   "ref": 4942,
+   "lazy": 626,
+   "other": 20878,
    "cdn": 1066693
   }
  },
  "completionLatencyMsWarm": [
-  136,
-  218,
-  350,
-  141
+  74,
+  163,
+  249,
+  91
  ],
  "completionMsInEditor": [],
  "latency": {
-  "diagnostics": 785
+  "diagnostics": 519,
+  "classify": 522
  },
  "assets": []
 }
