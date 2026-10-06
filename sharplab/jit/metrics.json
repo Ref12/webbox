@@ -1,0 +1,41 @@
+{
+ "env": "GH Actions ubuntu 4vCPU, headless Chromium (system), c2w v0.8.4 qemu-wasm TCG amd64, .NET 10.0.x runtime",
+ "native": {
+  "jitdisasm_run_s": 0.13
+ },
+ "sizes_bytes": {
+  "full": {
+   "data_raw": 276729383,
+   "data_br9": 88240644,
+   "wasm_raw": 41241461,
+   "wasm_br9": 11503023,
+   "js_raw": 277613,
+   "js_br9": 62673,
+   "rootfs_docker_mb": 203
+  },
+  "slim": {
+   "data_raw": 219077895,
+   "data_br9": 69136136,
+   "wasm_raw": 41241461,
+   "wasm_br9": 11503023,
+   "rootfs_docker_mb": 161,
+   "note": "dotnet dir 39MB; rest is Ubuntu runtime-deps base"
+  }
+ },
+ "browser_ms": {
+  "full_image_cold_ttfo_ms": 42494,
+  "full_poll_granularity_ms": 3000,
+  "slim_boot_to_shell_prompt_ms": 10386,
+  "slim_per_compile_ms": [
+   54756,
+   52408,
+   52765
+  ],
+  "slim_per_compile_noupload_ms": [
+   55823,
+   56532,
+   48317
+  ]
+ },
+ "notes": "assets served from localhost (no network cost); per-compile = cold dotnet process in booted VM incl ~6KB base64 upload (upload negligible)"
+}
