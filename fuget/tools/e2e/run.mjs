@@ -77,6 +77,8 @@ await shot('screenshot-decompiled.png');
 // ---------- 4. API diff ----------
 await page.getByRole('link', { name: 'Diff', exact: true }).click();
 await page.waitForSelector('.dsum', { timeout: 240000 });
+await page.locator('.diffbar select').selectOption('12.0.3');   // 13.0.2 -> 13.0.3 has no API changes; 12.0.3 -> 13.0.3 does
+await page.waitForSelector('.dtype', { timeout: 240000 });
 const dsum = await page.locator('.dsum').innerText();
 assert.ok(await page.locator('.dtype').count() > 0, 'diff lists types: ' + dsum);
 metrics.diff = (await page.evaluate(() => window.__metrics.diff)).at(-1);
