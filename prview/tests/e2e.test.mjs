@@ -227,8 +227,7 @@ test('rate limit is explained', async () => {
   await p.locator('#dlg summary', { hasText: 'Paste a token' }).click();
   await p.fill('#tok', 'ghp_test_token');
   await p.click('#st-save');
-  await p.waitForLoadState();
-  assert.equal(await p.evaluate(() => localStorage.getItem('prview.token')), 'ghp_test_token');
+  await p.waitForFunction(() => localStorage.getItem('prview.token') === 'ghp_test_token');
   await h.close();
 });
 
