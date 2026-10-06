@@ -4,7 +4,7 @@ name: Deploy (GitHub Pages + Cloudflare Worker)
 # (static assets, wrangler.jsonc; secrets CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID; https://webbox.<account>.workers.dev/). The C# REPL is built once;
 # stage.mjs --target=pages|cloudflare makes the two copies. Every app in this repository is static: each folder is published as it is, no build step,
 # except the .NET WebAssembly apps csharp/ (C# REPL), fuget/ (NuGet package browser) and sharplab/ (SharpLab-style playground):
-# their sources are not copied; each is built (reference-assembly prep + dotnet publish, no workloads) and staged at /csharp/, /fuget/ and /sharplab/.
+# their sources are not copied; each is built (reference-assembly prep + dotnet publish, no workloads; relink via build/NoWorkloadWasm.props) and staged at /csharp/, /fuget/ and /sharplab/.
 # sharplab/tools/stage.mjs is the Pages-style staging (.br decoded in the page), used for both targets.
 # hexad's remote app lives in the hexad repository (web/remote) and is published here at /hexad/.
 on:
@@ -22,7 +22,46 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The opt-in AOT builds (?aot=1) take many minutes each: they run in a separate job (matrix, parallel), are cached on a hash of their
+  # sources (rebuilt only when those change) and are handed to the deploy job as artifacts. No workload: build/NoWorkloadWasm.props
+  # fetches the packs from NuGet; ~/.nuget/packages is cached on the pinned versions.
+  aot:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [csharp, sharplab]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-wasm-${{ runner.os }}-${{ hashFiles('build/NoWorkloadWasm.*', 'global.json') }}-${{ matrix.app }}
+          restore-keys: nuget-wasm-${{ runner.os }}-
+      - id: aotcache
+        uses: actions/cache@v4
+        with:
+          path: ${{ matrix.app }}/dist-aot
+          key: aot-${{ matrix.app }}-${{ hashFiles(format('{0}/src/**', matrix.app), 'shared/**', 'build/**', format('{0}/tools/**', matrix.app)) }}
+      - name: Build the AOT runtime
+        if: steps.aotcache.outputs.cache-hit != 'true'
+        working-directory: ${{ matrix.app }}
+        run: |
+          if [ "${{ matrix.app }}" = csharp ]; then P=CsRepl; T=CsRepl.Tests; else P=SharpLab; T=SharpLab.Tests; fi
+          dotnet restore tests/$T
+          dotnet run tools/PrepareRefs.cs
+          dotnet run tools/PrepareLazy.cs
+          dotnet publish src/$P.Wasm -c Release -p:NoWorkloadWasmAot=true -p:PublishTrimmed=true -p:IntermediateOutputPath=obj/aot/ -o dist-aot
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aot-${{ matrix.app }}
+          path: ${{ matrix.app }}/dist-aot
+          retention-days: 1
   deploy:
+    needs: aot
     runs-on: ubuntu-latest
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -44,6 +83,19 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-wasm-${{ runner.os }}-${{ hashFiles('build/NoWorkloadWasm.*', 'global.json') }}-main
+          restore-keys: nuget-wasm-${{ runner.os }}-
+      - uses: actions/download-artifact@v4
+        with:
+          name: aot-csharp
+          path: csharp/dist-aot
+      - uses: actions/download-artifact@v4
+        with:
+          name: aot-sharplab
+          path: sharplab/dist-aot
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -80,10 +132,10 @@ jobs:
           mkdir -p _site/hexad
           rsync -a --delete --exclude 'README.md' _hexad/web/remote/ _site/hexad/
           # csharp/ -> _site/csharp/: app files with content-hashed names, big binaries only as .br (decoded in the page; Pages cannot send Content-Encoding for them)
-          node csharp/tools/stage.mjs csharp/dist/wwwroot _site/csharp --target=pages
+          node csharp/tools/stage.mjs csharp/dist/wwwroot _site/csharp --target=pages --aot=csharp/dist-aot/wwwroot
           # fuget: publish output replaces the copied sources
           rm -rf _site/fuget && mkdir -p _site/fuget && cp -r fuget/dist/wwwroot/. _site/fuget/
-          node sharplab/tools/stage.mjs sharplab/dist/wwwroot _site/sharplab
+          node sharplab/tools/stage.mjs sharplab/dist/wwwroot _site/sharplab --aot=sharplab/dist-aot/wwwroot
           touch _site/.nojekyll
       - name: Stage the Cloudflare site
         run: |
@@ -91,9 +143,9 @@ jobs:
           rsync -a --exclude '.git' --exclude '.github' --exclude '_site' --exclude '_cf_site' --exclude '_hexad' --exclude '/csharp' --exclude '/sharplab' --exclude 'README.md' --exclude 'wrangler.jsonc' ./ _cf_site/
           mkdir -p _cf_site/hexad
           rsync -a --delete --exclude 'README.md' _hexad/web/remote/ _cf_site/hexad/
-          node csharp/tools/stage.mjs csharp/dist/wwwroot _cf_site/csharp --target=cloudflare --mt=csharp/dist-mt/wwwroot
+          node csharp/tools/stage.mjs csharp/dist/wwwroot _cf_site/csharp --target=cloudflare --mt=csharp/dist-mt/wwwroot --aot=csharp/dist-aot/wwwroot
           rm -rf _cf_site/fuget && mkdir -p _cf_site/fuget && cp -r fuget/dist/wwwroot/. _cf_site/fuget/
-          node sharplab/tools/stage.mjs sharplab/dist/wwwroot _cf_site/sharplab
+          node sharplab/tools/stage.mjs sharplab/dist/wwwroot _cf_site/sharplab --aot=sharplab/dist-aot/wwwroot
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
