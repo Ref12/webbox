@@ -1,4 +1,4 @@
-// Live smoke test against a real public PR (anonymous, uses a few of the 60 API requests per hour).
+// Live READ-ONLY smoke test against a real public PR (anonymous, uses a few of the 60 API requests per hour). It never signs in and never posts.
 // node smoke.mjs [owner/repo#n]   (default: dotnet/runtime#135064: 6 files, 3 commits, review comments)
 import { chromium } from 'playwright-core';
 import assert from 'node:assert/strict';
@@ -16,8 +16,16 @@ const rate = await p.locator('#rate').innerText();
 await p.click('#tree .tr[data-path$="LinkTask.cs"]');
 await p.waitForSelector('.cm .thread', { timeout: 20000 });
 await p.waitForTimeout(800);
+assert.equal(await p.locator('#signin-btn').innerText(), 'Sign in');
+assert.equal(await p.locator('#win .addc').count(), 0, 'signed out: nothing to post with');
+const list = await p.evaluate(async () => { location.hash = '#/?tab=repo&repo=dotnet/runtime'; await new Promise(r => setTimeout(r, 300)); return null; });
+await p.waitForSelector('.prrow', { timeout: 30000 });
+const listed = await p.locator('.prrow').count();
+await p.goBack().catch(() => {});
+await p.evaluate(() => { location.hash = '#/dotnet/runtime/pull/135064'; });
+await p.waitForSelector('.row', { timeout: 30000 });
 await p.screenshot({ path: new URL('../docs/screenshots/live-smoke.png', import.meta.url).pathname });
-console.log({ title, count, rate, rows: await p.locator('.row').count(), threads: await p.locator('.cm .thread').count(), errors });
-assert.match(title, /ILLink/); assert.match(count, /6 changed files/); assert.deepEqual(errors, []);
+console.log({ listed, title, count, rate, rows: await p.locator('.row').count(), threads: await p.locator('.cm .thread').count(), errors });
+assert.match(title, /ILLink/); assert.match(count, /6 changed files/); assert.ok(listed >= 1, 'the public repo list works anonymously'); assert.deepEqual(errors, []);
 await br.close(); srv.close();
 console.log('live smoke ok');
