@@ -109,7 +109,7 @@ test('mark reviewed, persisted per PR and head sha', async () => {
   await finish(h);
 });
 
-test('keyboard: j/k files, n/p changes, c collapse, / filter, ? help', async () => {
+test('keyboard: j/k files, n/p changes, x collapse, / filter, ? help', async () => {
   const h = await start(); const p = h.page;
   await open(h);
   const cur = () => p.evaluate(() => window.__prview.state.current.filename);
@@ -122,9 +122,9 @@ test('keyboard: j/k files, n/p changes, c collapse, / filter, ? help', async () 
   assert.ok(y1 > y0, 'n moves to the next change');
   await p.keyboard.press('p'); await p.waitForTimeout(150);
   assert.ok(await p.evaluate(() => document.querySelector('#diff').scrollTop) < y1);
-  await p.keyboard.press('c');
+  await p.keyboard.press('x');
   await p.waitForFunction(() => document.querySelector('#win .fh.collapsed'));
-  await p.keyboard.press('c');
+  await p.keyboard.press('x');
   await p.keyboard.press('/'); await p.keyboard.type('mock');
   await p.waitForFunction(() => document.querySelectorAll('#tree .tr[data-path]').length === 1);
   assert.equal(await p.locator('#win .fh').count(), 1);
@@ -219,14 +219,15 @@ test('rate limit is explained', async () => {
   await p.goto(h.base + PR);
   await p.waitForSelector('#banner:not([hidden])');
   const t = await p.locator('#banner').innerText();
-  assert.match(t, /Rate limit reached/); assert.match(t, /60 requests per hour/); assert.match(t, /Add a token/);
+  assert.match(t, /Rate limit reached/); assert.match(t, /60 requests per hour/); assert.match(t, /Sign in/);
   await shot(p, 'rate-limit');
-  await p.click('#banner [data-act=settings]');
-  await p.waitForSelector('#tok');
+  await p.click('#banner [data-act=signin]');
+  await p.waitForSelector('#si-paste');
+  await p.click('#si-paste');
+  await p.locator('#dlg summary', { hasText: 'Paste a token' }).click();
   await p.fill('#tok', 'ghp_test_token');
-  await p.click('#tok-save');
-  await p.waitForLoadState();
-  assert.equal(await p.evaluate(() => localStorage.getItem('prview.token')), 'ghp_test_token');
+  await p.click('#st-save');
+  await p.waitForFunction(() => localStorage.getItem('prview.token') === 'ghp_test_token');
   await h.close();
 });
 
