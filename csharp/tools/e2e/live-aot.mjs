@@ -56,6 +56,7 @@ async function sharplab(aot) {
   // CPU-bound: run a program (Run button), time inside it and wall time until the output appears
   const prog = 'using System;\nusing System.Diagnostics;\npublic class Program { public static void Main() { var sw = Stopwatch.StartNew(); long s = 0; for (long i = 0; i < 100000000; i++) s += i ^ (i >> 3); Console.WriteLine("cpu " + sw.ElapsedMilliseconds + " ms, " + s); } }';
   await page.evaluate((p) => window.__sharplab.setCode(p), prog);
+  await page.click('[data-tab=run]');
   await page.waitForSelector('#runbtn:not([disabled])', { timeout: 60000 });
   const a = Date.now(); await page.click('#runbtn');
   await page.waitForFunction(() => /cpu \d+ ms/.test(document.getElementById('runout')?.innerText || ''), null, { timeout: 300000 });
