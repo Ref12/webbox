@@ -137,7 +137,7 @@ test('phone: everything that moved is reachable in the drawer', async () => {
   await p.waitForFunction(() => window.__prview.state.view === 'one');
   // settings dialog from the drawer
   await openDrawer(p);
-  await p.click('#d-settings'); await p.waitForSelector('#dlg #tok'); await p.click('#st-close');
+  await p.click('#d-settings'); await p.waitForSelector('#dlg #st-stack'); await p.click('#st-close');
   // comments panel from the drawer
   await openDrawer(p);
   await p.click('#d-cm');
