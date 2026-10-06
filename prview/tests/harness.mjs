@@ -23,6 +23,7 @@ export async function start({ viewport = { width: 1600, height: 1000 }, fixture 
     if (signedIn) { localStorage.setItem('prview.token', 'gho_faketoken'); localStorage.setItem('prview.auth', 'oauth'); localStorage.setItem('prview.user', JSON.stringify({ login: ME.login, name: ME.name, avatar: ME.avatar_url })); }
     if (settings) localStorage.setItem('prview.settings', JSON.stringify(settings));
   }, { signedIn, settings, ME });
+  setTimeout(() => { br.close().catch(() => {}); srv.close(); }, 150000).unref();   // safety net: a failed test must not leave Chromium keeping the runner alive
   const rec = JSON.parse(fs.readFileSync(fixture, 'utf8'));
   const misses = [], seen = [], calls = [], mocks = [];
   const on = (method, re, fn) => mocks.unshift({ method, re, fn });
