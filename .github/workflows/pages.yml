@@ -5,7 +5,7 @@ name: Deploy (GitHub Pages + Cloudflare Worker)
 # stage.mjs --target=pages|cloudflare makes the two copies. Every app in this repository is static: each folder is published as it is, no build step,
 # except the .NET WebAssembly apps csharp/ (C# REPL), fuget/ (NuGet package browser) and sharplab/ (SharpLab-style playground):
 # their sources are not copied; each is built (reference-assembly prep + dotnet publish, no workloads; relink via build/NoWorkloadWasm.props) and staged at /csharp/, /fuget/ and /sharplab/.
-# sharplab/tools/stage.mjs is the Pages-style staging (.br decoded in the page), used for both targets.
+# sharplab/tools/stage.mjs is the Pages-style staging (.br decoded in the page), used for both targets; --target=cloudflare adds the 25 MiB per-file check.
 # hexad's remote app lives in the hexad repository (web/remote) and is published here at /hexad/.
 on:
   push:
@@ -145,7 +145,7 @@ jobs:
           rsync -a --delete --exclude 'README.md' _hexad/web/remote/ _cf_site/hexad/
           node csharp/tools/stage.mjs csharp/dist/wwwroot _cf_site/csharp --target=cloudflare --mt=csharp/dist-mt/wwwroot --aot=csharp/dist-aot/wwwroot
           rm -rf _cf_site/fuget && mkdir -p _cf_site/fuget && cp -r fuget/dist/wwwroot/. _cf_site/fuget/
-          node sharplab/tools/stage.mjs sharplab/dist/wwwroot _cf_site/sharplab --aot=sharplab/dist-aot/wwwroot
+          node sharplab/tools/stage.mjs sharplab/dist/wwwroot _cf_site/sharplab --target=cloudflare --aot=sharplab/dist-aot/wwwroot
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

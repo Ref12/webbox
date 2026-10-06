@@ -7,3 +7,5 @@ export const DOTNET = { st: './_framework/dotnet.js', mt: './mt/_framework/dotne
 export const wantAot = () => { try { const q = new URLSearchParams(location.search).get('aot'); return q !== null ? q === '1' : localStorage.getItem('webbox-aot') === '1'; } catch { return false; } };
 // true only on GitHub Pages, which cannot send Content-Encoding for precompressed files: big binaries are fetched as .br and decoded in the worker (br.js).
 export const BROTLI = false;
+// null: every binary is fetched as .br (Pages). Else only these paths (relative to the app, set by stage.mjs for files over Cloudflare's 25 MiB asset limit).
+export const BROTLI_ONLY = null;

@@ -24,12 +24,22 @@ const rel = (p) => path.relative(out, p).split(path.sep).join('/');
 
 // ---- 1. compression ----
 const keepBr = /\.(wasm|dll|bin)$/;
+// --target=cloudflare (Worker static assets, 25 MiB per file): this copy already ships big binaries as .br (decoded in the page); a plain file over the
+// limit (the AOT dotnet.native.wasm) is removed so only its .br ships, and the staging fails if anything is still too big.
+const CF_LIMIT = 25 * 1024 * 1024, bigPlain = new Set();
+if (opt.target === 'cloudflare') {
+  for (const f of walk(out)) if (!/\.(gz|br)$/.test(f) && fs.statSync(f).size > CF_LIMIT) {
+    const packed = fs.existsSync(f + '.br') && fs.statSync(f + '.br').size;
+    if (!packed || packed > CF_LIMIT) throw new Error('Cloudflare asset too large: ' + rel(f) + ' is ' + fs.statSync(f).size + ' bytes' + (packed ? ' and its .br ' + packed : ' and has no .br') + ' (limit ' + CF_LIMIT + ')');
+    fs.rmSync(f); bigPlain.add(f);
+  }
+}
 let kept = 0, dropped = 0;
 for (const f of walk(out)) {
   if (f.endsWith('.gz')) { fs.rmSync(f); dropped++; }
   else if (f.endsWith('.br')) {
     const plain = f.slice(0, -3);
-    if (keepBr.test(plain) && fs.existsSync(plain)) kept++; else { fs.rmSync(f); dropped++; }
+    if (keepBr.test(plain) && (fs.existsSync(plain) || bigPlain.has(plain))) kept++; else { fs.rmSync(f); dropped++; }
   }
 }
 
@@ -85,4 +95,8 @@ while (done.size < targets.length) {
   done.add(ready);
 }
 fs.writeFileSync(path.join(out, 'build.json'), JSON.stringify({ build: dotnetJsHash, files: Object.fromEntries(name) }, null, 1));
+if (opt.target === 'cloudflare') {
+  const big = walk(out).filter((f) => fs.statSync(f).size > CF_LIMIT);
+  if (big.length) throw new Error('Cloudflare asset too large (> 25 MiB): ' + big.map((f) => rel(f) + ' ' + fs.statSync(f).size).join(', '));
+}
 console.log('staged ' + out + ': kept ' + kept + ' .br, dropped ' + dropped + ' compressed copies; app files: ' + [...name].map(([a, b]) => b).join(', '));

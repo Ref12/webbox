@@ -1,7 +1,7 @@
 // Everything the runtime workers need to get bytes: a retrying fetch, the Cache API, optional in-worker Brotli (GitHub Pages only), and the
 // JS side of Interop.FetchAsset / TakeAsset. No DOM: runs in a worker.
 // Shared by csharp/ and sharplab/: it imports the BUILD and BROTLI settings from the app's own ./config.js; `prefix` names the app's Cache API entries.
-import { BUILD, BROTLI } from './config.js';
+import { BUILD, BROTLI, BROTLI_ONLY } from './config.js';
 
 export function createAssets({ emit, threads = false, aot = false, prefix = 'csrepl', brotli = BROTLI }) {
   const hashes = {};   // site path -> content hash (from the manifests): a changed file is a new URL
@@ -42,8 +42,9 @@ export function createAssets({ emit, threads = false, aot = false, prefix = 'csr
   async function cacheOpen(name) { try { return await caches.open(name); } catch { return null; } }
   // GitHub Pages only: binaries are shipped as <file>.br and decoded here; the plain file is the fallback.
   const PACKED = /\.(wasm|dll|bin|pdb)(\?|$)/;
+  const usePacked = (key) => brotli && PACKED.test(key) && (!BROTLI_ONLY || BROTLI_ONLY.some((p) => new URL(key, self.location.href).pathname.endsWith('/' + p)));
   async function fetchPacked(key) {
-    if (brotli && PACKED.test(key)) {
+    if (usePacked(key)) {
       try {
         const u = new URL(key); u.pathname += '.br';
         const resp = await fetch(u.href);
@@ -89,7 +90,7 @@ export function createAssets({ emit, threads = false, aot = false, prefix = 'csr
   // The runtime's own downloads: Cache API first. Only on GitHub Pages is the .wasm taken from <file>.br; elsewhere the runtime's default (the server compresses).
   const fwCacheName = prefix + '-fw-' + BUILD + (threads ? '-mt' : aot ? '-aot' : '');
   function loadBootResource(type, name, defaultUri) {
-    if (!brotli || !/\.wasm$/.test(name)) return undefined;
+    if (!/\.wasm$/.test(name) || !usePacked(defaultUri)) return undefined;
     return (async () => {
       const key = new URL(defaultUri, self.location.href).href;
       const cache = await cacheOpen(fwCacheName);

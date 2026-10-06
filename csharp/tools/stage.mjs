@@ -2,7 +2,8 @@
 //   node tools/stage.mjs <dist/wwwroot> <outDir> [--target=pages|cloudflare] [--mt=<dist-mt/wwwroot>] [--aot=<dist-aot/wwwroot>]
 // target=pages (GitHub Pages: no headers, no Content-Encoding for precompressed files): only the big binaries keep their .br (fetched and decoded in the
 //   worker, see wwwroot/br.js, config.js BROTLI=true); every .gz and every .br of a text file is dropped (Pages gzips text itself).
-// target=cloudflare (Worker static assets): no .br/.gz at all and no decoder; the edge compresses. Writes _headers (COOP/COEP, cache rules, Content-Types).
+// target=cloudflare (Worker static assets): no .br/.gz and no decoder; the edge compresses. Exception: a file over the 25 MiB asset limit (the AOT dotnet.native.wasm)
+//   ships only as its .br, decoded in the page (config.js BROTLI_ONLY lists those files). Fails the staging if any file is still over the limit. Writes _headers (COOP/COEP, cache rules, Content-Types).
 // --mt: the multithreaded .NET build (?threads=1); only its _framework is staged, as mt/_framework.
 // --aot: the opt-in AOT build (?aot=1 or the header toggle); only its _framework is staged, as aot/_framework.
 // Cache busting for both: GitHub Pages sends max-age=600. App files get content-hashed names (main.1a2b3c4d.js, references
@@ -33,10 +34,21 @@ const rel = (p) => path.relative(out, p).split(path.sep).join('/');
 
 // ---- 1. compression ----
 const keepBr = /\.(wasm|dll|bin)$/;
-if (target === 'cloudflare') { fs.rmSync(path.join(out, 'vendor'), { recursive: true, force: true }); fs.rmSync(path.join(out, 'br.js'), { force: true }); }
+const CF_LIMIT = 25 * 1024 * 1024;   // Workers static assets: 25 MiB per file
+// Cloudflare: a file over the limit cannot ship plain. It ships as <file>.br only (fetched and decoded in the page, like the Pages copy; the
+// loader is told which files via config.js BROTLI_ONLY) and the plain file is removed. Everything else is left to the edge compression.
+const brotliOnly = [];
+if (target === 'cloudflare') {
+  for (const f of walk(out)) if (!/\.(gz|br)$/.test(f) && fs.statSync(f).size > CF_LIMIT) {
+    const packed = fs.existsSync(f + '.br') && fs.statSync(f + '.br').size;
+    if (!packed || packed > CF_LIMIT) throw new Error('Cloudflare asset too large: ' + rel(f) + ' is ' + fs.statSync(f).size + ' bytes' + (packed ? ' and its .br ' + packed : ' and has no .br') + ' (limit ' + CF_LIMIT + '); it would need splitting into chunks');
+    fs.rmSync(f); brotliOnly.push(rel(f));
+  }
+  if (!brotliOnly.length) { fs.rmSync(path.join(out, 'vendor'), { recursive: true, force: true }); fs.rmSync(path.join(out, 'br.js'), { force: true }); }
+}
 let kept = 0, dropped = 0;
 for (const f of walk(out)) {
-  if (target === 'cloudflare' && /\.(gz|br)$/.test(f)) { fs.rmSync(f); dropped++; continue; }
+  if (target === 'cloudflare' && /\.(gz|br)$/.test(f)) { if (brotliOnly.includes(rel(f).slice(0, -3))) { kept++; continue; } fs.rmSync(f); dropped++; continue; }
   if (f.endsWith('.gz')) { fs.rmSync(f); dropped++; }
   else if (f.endsWith('.br')) {
     const plain = f.slice(0, -3);
@@ -79,7 +91,8 @@ while (done.size < targets.length) {
     if (ready === 'config.js') {
       const need = (s, r) => { if (!text.includes(s)) throw new Error('main.js: expected ' + s); text = text.replace(s, r); };
       need("export const BUILD = 'dev';", "export const BUILD = '" + dotnetJsHash + "';");
-      need('export const BROTLI = false;', 'export const BROTLI = ' + (target === 'pages') + ';');
+      need('export const BROTLI = false;', 'export const BROTLI = ' + (target === 'pages' || brotliOnly.length > 0) + ';');
+      need('export const BROTLI_ONLY = null;', 'export const BROTLI_ONLY = ' + (target === 'pages' || !brotliOnly.length ? 'null' : JSON.stringify(brotliOnly)) + ';');
       if (opt.mt) need("mt: './mt/_framework/dotnet.js'", "mt: './mt/_framework/dotnet.js?h=" + hash(fs.readFileSync(path.join(out, 'mt/_framework/dotnet.js'))) + "'");
       if (opt.aot) need("aot: './aot/_framework/dotnet.js'", "aot: './aot/_framework/dotnet.js?h=" + hash(fs.readFileSync(path.join(out, 'aot/_framework/dotnet.js'))) + "'");
       need("ref: 'ref/manifest.json'", "ref: 'ref/manifest.json?h=" + hashOf('ref/manifest.json') + "'");
@@ -112,6 +125,10 @@ if (target === 'cloudflare') {
     rule('/csharp/ref/*.bin', wasmType), rule('/csharp/ref/a/*', wasmType), rule('/csharp/lazy/*.dll', wasmType),
   ];
   fs.writeFileSync(path.join(out, '..', '_headers'), parts.join('\n'));   // the assets root: out is <root>/csharp
+}
+if (target === 'cloudflare') {   // the check that catches it before wrangler does
+  const root = path.join(out, '..'), big = walk(root).filter((f) => fs.statSync(f).size > CF_LIMIT);
+  if (big.length) throw new Error('Cloudflare asset too large (> 25 MiB): ' + big.map((f) => path.relative(root, f) + ' ' + fs.statSync(f).size).join(', '));
 }
 fs.writeFileSync(path.join(out, 'build.json'), JSON.stringify({ build: dotnetJsHash, files: Object.fromEntries(name) }, null, 1));
 console.log('staged (' + target + ') ' + out + ': kept ' + kept + ' .br, dropped ' + dropped + ' compressed copies; app files: ' + [...name].map(([a, b]) => b).join(', '));
