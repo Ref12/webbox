@@ -2,7 +2,14 @@ import { dotnet } from './_framework/dotnet.js';
 import { History } from './history.js';
 import { toHtml } from './classify.js';
 import { registerIntellisense } from './intellisense.js';
+import { brotliDecode } from './br.js';
 
+// BUILD and the two manifest URLs are rewritten by tools/stage.mjs (content hashes) when the site is staged for GitHub Pages.
+const BUILD = 'dev';
+const MANIFESTS = { ref: 'ref/manifest.json', lazy: 'lazy/manifest.json' };
+const hashes = (window.__hashes = {});   // site path -> content hash (from the manifests): the ?h= query makes a changed file a new URL, so GitHub Pages' 10 minute cache never serves a stale one
+const noBr = new URLSearchParams(location.search).has('nobr');   // measuring: skip the .br files and fetch the plain ones
+const withHash = (p) => (hashes[p] ? p + '?h=' + hashes[p] : p);
 const $ = (id) => document.getElementById(id);
 const metrics = (window.__metrics = { marks: {}, completion: [], assets: [] });
 const t0 = performance.now();
@@ -47,8 +54,27 @@ let refVersion = 'v0';
 const taken = new Map();
 const assetLog = (window.__assetLog = []);
 async function cacheOpen(name) { try { return await caches.open(name); } catch { return null; } }
+// Binary assets are shipped as <file>.br and decoded here (see br.js); the plain file is the fallback (and what ?nobr=1 uses).
+const PACKED = /\.(wasm|dll|bin|pdb)(\?|$)/;
+async function fetchPacked(key) {
+  if (!noBr && PACKED.test(key)) {
+    try {
+      const u = new URL(key); u.pathname += '.br';
+      const resp = await fetch(u.href);
+      if (resp.ok) {
+        const packed = new Uint8Array(await resp.arrayBuffer());
+        const bytes = await brotliDecode(packed);
+        return { bytes, wire: packed.length, status: 200 };
+      }
+    } catch (e) { console.warn('brotli path failed for ' + fileName(key) + ', using the plain file:', e.message); }
+  }
+  const resp = await fetch(key);
+  if (!resp.ok) return { bytes: null, status: resp.status };
+  const bytes = new Uint8Array(await resp.arrayBuffer());
+  return { bytes, wire: Number(resp.headers.get('content-length') || 0) || bytes.length, status: 200 };
+}
 async function getBytes(url, cacheName, { cacheIt = true } = {}) {
-  const key = new URL(url, location.href).href;
+  const key = new URL(withHash(url), location.href).href;
   const cache = cacheIt ? await cacheOpen(cacheName) : null;
   const t = performance.now();
   if (cache) {
@@ -58,15 +84,40 @@ async function getBytes(url, cacheName, { cacheIt = true } = {}) {
   let last;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      const resp = await fetch(key);   // same-origin goes through the retrying wrapper above
-      if (resp.status === 404) return { bytes: null, from: 'network', ms: performance.now() - t };
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      const b = new Uint8Array(await resp.arrayBuffer());
-      if (cache) { try { await cache.put(key, new Response(b)); } catch (e) { console.warn('cache put failed', e); } }
-      return { bytes: b, from: 'network', ms: performance.now() - t, wire: Number(resp.headers.get('content-length') || 0) };
+      const got = await fetchPacked(key);   // same-origin goes through the retrying wrapper above
+      if (got.status === 404) return { bytes: null, from: 'network', ms: performance.now() - t };
+      if (!got.bytes) throw new Error('HTTP ' + got.status);
+      if (cache) { try { await cache.put(key, new Response(got.bytes)); } catch (e) { console.warn('cache put failed', e); } }
+      return { bytes: got.bytes, from: 'network', ms: performance.now() - t, wire: got.wire };
     } catch (e) { last = e; await new Promise((r) => setTimeout(r, 400 * 3 ** (attempt - 1))); }
   }
   throw new Error('Could not download ' + fileName(url) + ': ' + last.message);
+}
+function registerHashes(kind, m) {
+  if (kind === 'ref') {
+    if (m.coreHash) hashes['ref/core.bin'] = m.coreHash;
+    if (m.typesHash) hashes['ref/types.json'] = m.typesHash;
+    for (const a of m.assemblies || []) if (a.h) hashes['ref/a/' + a.name] = a.h;
+  } else for (const x of m.files || []) if (x.h) hashes['lazy/' + x.name] = x.h;
+}
+// The .NET runtime's own downloads (assemblies, dotnet.native.wasm): from the Cache API, else <file>.br decoded here, else the plain file.
+const fwCacheName = 'csrepl-fw-' + BUILD;
+function loadBootResource(type, name, defaultUri) {
+  if (noBr || !/\.wasm$/.test(name)) return undefined;   // scripts and everything else: the runtime's default (Pages gzips those)
+  return (async () => {
+    const key = new URL(defaultUri, location.href).href;
+    const cache = await cacheOpen(fwCacheName);
+    let bytes;
+    const hit = cache && (await cache.match(key));
+    if (hit) bytes = new Uint8Array(await hit.arrayBuffer());
+    else {
+      const got = await fetchPacked(key);
+      if (!got.bytes) throw new Error('Could not download ' + name + ': HTTP ' + got.status + ' (after 3 tries). Check your connection and reload.');
+      bytes = got.bytes;
+      if (cache) cache.put(key, new Response(bytes)).catch((e) => console.warn('cache put failed', e));
+    }
+    return new Response(bytes, { headers: { 'content-type': 'application/wasm' } });
+  })();
 }
 // JS side of Interop.FetchAsset / TakeAsset
 const hostModule = {
@@ -233,7 +284,8 @@ async function main() {
   $('run').onclick = () => submit(true); // explicit Run (touch): always run
 
   setStatus('downloading .NET runtime…');
-  const { getAssemblyExports, getConfig, setModuleImports } = await dotnet.withDiagnosticTracing(false).create();
+  const { getAssemblyExports, getConfig, setModuleImports } = await dotnet.withDiagnosticTracing(false).withResourceLoader(loadBootResource).create();
+  for (const k of await caches.keys()) if (k.startsWith('csrepl-fw-') && k !== fwCacheName) await caches.delete(k);
   setModuleImports('host', hostModule);
   mark('runtimeCreated');
   exportsRef = await getAssemblyExports(getConfig().mainAssemblyName);
@@ -245,8 +297,9 @@ async function main() {
 
   // reference assemblies: manifest (small) + the core bundle (one request); everything else on demand
   setStatus('loading reference assemblies…');
-  const mf = await (await fetch('ref/manifest.json')).text();
+  const mf = await (await fetch(MANIFESTS.ref)).text();
   refVersion = JSON.parse(mf).version;
+  registerHashes('ref', JSON.parse(mf));
   for (const k of await caches.keys()) if (k.startsWith('csrepl-refs-') && k !== 'csrepl-refs-' + refVersion) await caches.delete(k);
   const core = await getBytes('ref/core.bin', 'csrepl-refs-' + refVersion);
   metrics.coreBundle = { bytes: core.bytes.length, from: core.from, ms: Math.round(core.ms) };
@@ -275,7 +328,8 @@ async function main() {
   async function loadIntellisense() {
     setBadge('IntelliSense: loading…', 'loading');
     const tl = performance.now();
-    const man = await (await fetch('lazy/manifest.json')).json();
+    const man = await (await fetch(MANIFESTS.lazy)).json();
+    registerHashes('lazy', man);
     const cacheName = 'csrepl-lazy-' + man.version;
     for (const k of await caches.keys()) if (k.startsWith('csrepl-lazy-') && k !== cacheName) await caches.delete(k);
     const total = man.files.reduce((s, f) => s + f.size, 0); let got = 0, fromCache = 0, wire = 0, doneN = 0;
