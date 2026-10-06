@@ -4,6 +4,7 @@
 // The page talks to them with the small message protocol (the protocol module).
 import { serve, batcher } from './protocol.js';
 import { createAssets } from './assets.js';
+import { loadIntellisense } from './intelli-loader.js';
 import { MANIFESTS, DOTNET } from './config.js';
 
 const role = self.name.startsWith('intelli') ? 'intelli' : 'exec';
@@ -76,33 +77,7 @@ const handlers = {
   // ---- intelli ----
   async loadIntellisense() {
     await booted;
-    emit('badge', { text: 'IntelliSense: loading…', cls: 'loading' });
-    const tl = performance.now();
-    const man = await (await fetch(MANIFESTS.lazy)).json();
-    assets.registerHashes('lazy', man);
-    const cacheName = 'csrepl-lazy-' + man.version;
-    for (const k of await caches.keys()) if (k.startsWith('csrepl-lazy-') && k !== cacheName) await caches.delete(k);
-    const total = man.files.reduce((s, f) => s + f.size, 0); let got = 0, fromCache = 0, wireBytes = 0;
-    const queue = [...man.files];
-    const worker = async () => {
-      for (let f; (f = queue.shift());) {
-        const r = await assets.getBytes('lazy/' + f.name, cacheName);
-        if (!r.bytes) throw new Error('missing lazy/' + f.name);
-        got += r.bytes.length; if (r.from === 'cache') fromCache++; else wireBytes += r.wire || f.br;
-        I().AddLazyAssembly(f.name, r.bytes);
-        emit('badge', { text: 'IntelliSense: ' + (got / 1048576).toFixed(1) + '/' + (total / 1048576).toFixed(1) + ' MB', cls: 'loading' });
-      }
-    };
-    await Promise.all([worker(), worker(), worker(), worker()]);
-    const lazy = { files: man.files.length, rawBytes: total, wireBytesBr: wireBytes, fromCache, downloadMs: Math.round(performance.now() - tl) };
-    emit('badge', { text: 'IntelliSense: starting…', cls: 'loading' });
-    await new Promise((r) => setTimeout(r, 30));
-    const ts = performance.now();
-    I().StartIntellisense(man.entry);
-    lazy.startMs = Math.round(performance.now() - ts);
-    const tc = performance.now();
-    await I().Intelli('Complete', 'Console.Wri', 11, '');
-    emit('metrics', { patch: { lazy, firstCompletionMs: Math.round(performance.now() - tc), net2: { ...assets.net } } });
+    await loadIntellisense({ assets, I, emit });
     return true;
   },
   async intelli({ op, text, pos, extra }) { await booted; return await I().Intelli(op, text, pos ?? 0, extra ?? ''); },

@@ -32,8 +32,9 @@ export function renderJit(host, ctx) {
     localStorage.setItem(KEY, url.value.trim());
     out.textContent = 'asking the endpoint…';
     try {
+      const assembly = await ctx.getAssemblyBase64();
       const resp = await fetch(url.value.trim(), { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assembly: ctx.getAssemblyBase64(), isExe: c.isExe, method: host.querySelector('#jit-method').value || '*', optimize: ctx.settings().optimize, arch: 'x64' }) });
+        body: JSON.stringify({ assembly, isExe: c.isExe, method: host.querySelector('#jit-method').value || '*', optimize: ctx.settings().optimize, arch: 'x64' }) });
       const text = await resp.text();
       out.textContent = resp.ok ? text : 'endpoint said HTTP ' + resp.status + ': ' + text;
     } catch (e) { out.textContent = 'could not reach the endpoint: ' + e.message; }

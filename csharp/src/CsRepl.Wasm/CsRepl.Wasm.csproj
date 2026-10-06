@@ -18,6 +18,11 @@
     <CompressionEnabled>true</CompressionEnabled>
   </PropertyGroup>
   <ItemGroup>
+    <!-- the JS that csharp/ and sharplab/ share (shared/js) is served from this app's root, next to its own scripts -->
+    <Content Include="../../../shared/js/*.js" Link="wwwroot/%(Filename)%(Extension)" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../CsRepl.Core/CsRepl.Core.csproj" />
+    <ProjectReference Include="../../../shared/IntelliHost/WebBox.IntelliHost.csproj" />
   </ItemGroup>
 </Project>

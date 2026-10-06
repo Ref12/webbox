@@ -1,129 +1,23 @@
-import { dotnet } from './_framework/dotnet.js';
 import { encodeShare, decodeShare, DEFAULTS } from './share.js';
 import { findPath, nodeAt, selectionOf, label } from './syntaxpath.js';
 import { renderJit } from './jit.js';
-import { brotliDecode } from './br.js';
+import { RuntimeClient } from './protocol.js';
+import { registerRoslyn } from './roslyn-monaco.js';
+import { VS_DARK } from './classify.js';
+import { BUILD } from './config.js';
 
-// BUILD and the manifest URL are rewritten by tools/stage.mjs (content hashes) when the site is staged for GitHub Pages.
-const BUILD = 'dev';
-const MANIFESTS = { ref: 'ref/manifest.json' };
-const hashes = (window.__hashes = {});   // site path -> content hash: the ?h= query makes a changed file a new URL (Pages caches for 10 minutes)
+// The page only draws: compile, the views and Run live in the "exec" worker, Roslyn IntelliSense in the "intelli" worker (runtime-worker.js), so neither a long
+// compile nor a running program blocks typing. BUILD and the manifest URLs (config.js) are rewritten by tools/stage.mjs (content hashes) when the site is staged.
 const noBr = new URLSearchParams(location.search).has('nobr');   // measuring: skip the .br files
-const withHash = (p) => (hashes[p] ? p + '?h=' + hashes[p] : p);
 
 const $ = (id) => document.getElementById(id);
-const metrics = (window.__metrics = { marks: {}, assets: [], compiles: [] });
+const metrics = (window.__metrics = { marks: {}, assets: [], compiles: [], build: BUILD, latency: {}, completion: [] });
 const t0 = performance.now();
 const now = () => Math.round(performance.now() - t0);
 const mark = (k) => (metrics.marks[k] = now());
 const setStatus = (s) => ($('status').textContent = s);
+const setBadge = (text, cls) => { const b = $('intelli'); if (b) { b.textContent = text; b.className = 'badge ' + (cls || ''); } };
 const nextFrame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
-
-// ---- resilient fetch: 3 tries with backoff for every same-origin GET (also the .NET runtime's own downloads); copied from csharp/ ----
-const net = (metrics.net = { started: 0, done: 0, bytes: 0, retries: 0 });
-const nativeFetch = window.fetch.bind(window);
-const fileName = (u) => decodeURIComponent(String(u?.url ?? u).split('?')[0].split('/').pop() || String(u));
-window.fetch = async function (input, init) {
-  const method = (init?.method || input?.method || 'GET').toUpperCase();
-  if (method !== 'GET' || (!String(input?.url ?? input).startsWith(location.origin) && /^https?:/.test(String(input?.url ?? input)))) return nativeFetch(input, init);
-  net.started++;
-  let lastErr;
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      const resp = await nativeFetch(input, init);
-      if (resp.ok || (resp.status < 500 && resp.status !== 408 && resp.status !== 429)) {
-        net.done++; net.bytes += Number(resp.headers.get('content-length') || 0);
-        if (!metrics.ready) setStatus('downloading… ' + net.done + '/' + net.started + ' files, ' + (net.bytes / 1048576).toFixed(1) + ' MB');
-        return resp;
-      }
-      lastErr = new Error('HTTP ' + resp.status);
-    } catch (e) { lastErr = e; }
-    net.retries++;
-    setStatus('retrying ' + fileName(input) + ' (' + attempt + '/3)…');
-    await new Promise((r) => setTimeout(r, 400 * 3 ** (attempt - 1)));
-  }
-  const err = new Error('Could not download ' + fileName(input) + ': ' + lastErr.message + ' (after 3 tries). Check your connection and reload.');
-  err.fileName = fileName(input);
-  throw err;
-};
-
-// ---- assets (reference assemblies): Cache API first, then network; .br decoding, hashes and boot-resource loading as in csharp/ (copied) ----
-let refVersion = 'v0';
-const taken = new Map();
-async function cacheOpen(name) { try { return await caches.open(name); } catch { return null; } }
-// Binary assets are shipped as <file>.br and decoded here (see br.js); the plain file is the fallback (and what ?nobr=1 uses).
-const PACKED = /\.(wasm|dll|bin|pdb)(\?|$)/;
-async function fetchPacked(key) {
-  if (!noBr && PACKED.test(key)) {
-    try {
-      const u = new URL(key); u.pathname += '.br';
-      const resp = await fetch(u.href);
-      if (resp.ok) {
-        const packed = new Uint8Array(await resp.arrayBuffer());
-        const bytes = await brotliDecode(packed);
-        return { bytes, wire: packed.length, status: 200 };
-      }
-    } catch (e) { console.warn('brotli path failed for ' + fileName(key) + ', using the plain file:', e.message); }
-  }
-  const resp = await fetch(key);
-  if (!resp.ok) return { bytes: null, status: resp.status };
-  const bytes = new Uint8Array(await resp.arrayBuffer());
-  return { bytes, wire: Number(resp.headers.get('content-length') || 0) || bytes.length, status: 200 };
-}
-async function getBytes(url, cacheName, { cacheIt = true } = {}) {
-  const key = new URL(withHash(url), location.href).href;
-  const cache = cacheIt ? await cacheOpen(cacheName) : null;
-  const t = performance.now();
-  if (cache) {
-    const hit = await cache.match(key);
-    if (hit) { const b = new Uint8Array(await hit.arrayBuffer()); return { bytes: b, from: 'cache', ms: performance.now() - t }; }
-  }
-  let last;
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      const got = await fetchPacked(key);   // same-origin goes through the retrying wrapper above
-      if (got.status === 404) return { bytes: null, from: 'network', ms: performance.now() - t };
-      if (!got.bytes) throw new Error('HTTP ' + got.status);
-      if (cache) { try { await cache.put(key, new Response(got.bytes)); } catch (e) { console.warn('cache put failed', e); } }
-      return { bytes: got.bytes, from: 'network', ms: performance.now() - t, wire: got.wire };
-    } catch (e) { last = e; await new Promise((r) => setTimeout(r, 400 * 3 ** (attempt - 1))); }
-  }
-  throw new Error('Could not download ' + fileName(url) + ': ' + last.message);
-}
-function registerHashes(m) {
-  if (m.coreHash) hashes['ref/core.bin'] = m.coreHash;
-  if (m.typesHash) hashes['ref/types.json'] = m.typesHash;
-  for (const a of m.assemblies || []) if (a.h) hashes['ref/a/' + a.name] = a.h;
-}
-// The .NET runtime's own downloads (assemblies, dotnet.native.wasm): from the Cache API, else <file>.br decoded here, else the plain file.
-const fwCacheName = 'sharplab-fw-' + BUILD;
-function loadBootResource(type, name, defaultUri) {
-  if (noBr || !/\.wasm$/.test(name)) return undefined;   // scripts and everything else: the runtime's default (Pages gzips those)
-  return (async () => {
-    const key = new URL(defaultUri, location.href).href;
-    const cache = await cacheOpen(fwCacheName);
-    let bytes;
-    const hit = cache && (await cache.match(key));
-    if (hit) bytes = new Uint8Array(await hit.arrayBuffer());
-    else {
-      const got = await fetchPacked(key);
-      if (!got.bytes) throw new Error('Could not download ' + name + ': HTTP ' + got.status + ' (after 3 tries). Check your connection and reload.');
-      bytes = got.bytes;
-      if (cache) cache.put(key, new Response(bytes)).catch((e) => console.warn('cache put failed', e));
-    }
-    return new Response(bytes, { headers: { 'content-type': 'application/wasm' } });
-  })();
-}
-// JS side of Interop.FetchAsset / TakeAsset
-const hostModule = {
-  async fetchAsset(path) {
-    const volatile = /manifest\.json$/.test(path);
-    const r = await getBytes(path, 'sharplab-refs-' + refVersion, { cacheIt: !volatile });
-    taken.set(path, r.bytes ?? new Uint8Array(0));
-    if (r.bytes && !volatile) metrics.assets.push({ path, bytes: r.bytes.length, from: r.from, ms: Math.round(r.ms) });
-  },
-  takeAsset(path) { const b = taken.get(path) ?? new Uint8Array(0); taken.delete(path); return b; },
-};
 
 // ---- Monaco from the CDN (a plain textarea / <pre> when it is unavailable) ----
 const MONACO = 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs';
@@ -161,9 +55,10 @@ async function createEditor(host) {
   try {
     monaco = await loadMonaco();
     registerIl(monaco);
-    monaco.editor.defineTheme('sl', { base: 'vs-dark', inherit: true, rules: [], colors: { 'editor.background': '#1e1f22' } });
+    monaco.editor.defineTheme('sl', { base: 'vs-dark', inherit: true, rules: Object.entries(VS_DARK).map(([token, c]) => ({ token, foreground: c })), colors: { 'editor.background': '#1e1f22' } });
     const ed = monaco.editor.create(host, { value: '', language: 'csharp', theme: 'sl', minimap: { enabled: false }, automaticLayout: true, fontSize: 13, fontFamily: FONT,
-      scrollBeyondLastLine: false, fixedOverflowWidgets: true, tabSize: 4, insertSpaces: true, quickSuggestions: false, suggestOnTriggerCharacters: false, padding: { top: 8 } });
+      scrollBeyondLastLine: false, fixedOverflowWidgets: true, tabSize: 4, insertSpaces: true, quickSuggestions: { other: true, comments: false, strings: false }, suggestOnTriggerCharacters: true, acceptSuggestionOnEnter: 'on',
+      parameterHints: { enabled: true }, 'semanticHighlighting.enabled': true, padding: { top: 8 } });
     ed.getModel().setEOL(monaco.editor.EndOfLineSequence.LF);
     const model = ed.getModel();
     metrics.editor = 'monaco';
@@ -176,7 +71,7 @@ async function createEditor(host) {
       markers: (diags) => monaco.editor.setModelMarkers(model, 'roslyn', diags.map((d) => ({
         severity: d.severity === 'error' ? monaco.MarkerSeverity.Error : d.severity === 'warning' ? monaco.MarkerSeverity.Warning : monaco.MarkerSeverity.Info,
         message: d.id + ': ' + d.message, code: d.id, startLineNumber: d.startLine, startColumn: d.startColumn, endLineNumber: d.endLine, endColumn: Math.max(d.endColumn, d.startColumn + 1) }))),
-      kind: 'monaco',
+      kind: 'monaco', model, monaco, editor: ed,
     };
   } catch (e) {
     console.warn('Monaco unavailable, using a textarea:', e.message);
@@ -204,7 +99,7 @@ function createOut(host, language) {
 }
 
 // ---- Syntax tree: lazily-built expandable tree linked to the editor selection ----
-const tree = { root: null, rootLi: null, sel: null, quiet: false };
+const tree = { root: null, rootLi: null, sel: null, pickSel: null };
 function buildTree(host, root, onPick) {
   host.textContent = '';
   const ul = document.createElement('ul'); host.appendChild(ul);
@@ -271,7 +166,21 @@ async function main() {
   const shared = await decodeShare(location.hash);
   Object.assign(state, shared ?? { code: SAMPLE });
   metrics.fromShareLink = !!shared;
-  let X = null, ed = null, compileId = 0, rendered = {}, last = null;
+  let ready = false, intelliReady = false, ed = null, compileId = 0, rendered = {}, last = null, compiledKey = null;
+  const spawn = (name) => () => new Worker(new URL('./runtime-worker.js', import.meta.url), { type: 'module', name });
+  const onEvent = (who) => (m) => {
+    if (m.event === 'status' && who === 'exec' && !metrics.ready) setStatus(m.text);
+    else if (m.event === 'badge') setBadge(m.text, m.cls);
+    else if (m.event === 'mark') mark(who + '.' + m.name);
+    else if (m.event === 'metrics') Object.assign(metrics, m.patch);
+    else if (m.event === 'crashed') { console.error(who + ' worker crashed', m.message); if (who === 'exec') setStatus('runtime crashed: ' + m.message); }
+  };
+  const exec = new RuntimeClient(spawn('exec'), { onEvent: onEvent('exec'), name: 'exec' });
+  const intelliW = new RuntimeClient(spawn('intelli'), { onEvent: onEvent('intelli'), name: 'intelli' });
+  window.__workers = { exec, intelli: intelliW };
+  // Roslyn IntelliSense requests carry the options bar, so the workspace is configured like the compile (language version, Release/Debug, optimize)
+  const call = async (op, text, pos, extra) => (intelliReady ? JSON.parse(await intelliW.request('intelli', { op, text, pos: pos ?? 0, extra: extra ?? '', settings: settingsJson() })) : null);
+  window.__intelli = call;
   const outs = {};
 
   // options bar
@@ -303,64 +212,83 @@ async function main() {
     }
   }
 
-  async function renderActive() {
+  let rendering = Promise.resolve();   // the view being drawn (tests await it)
+  const renderActive = () => (rendering = renderImpl());
+  async function renderImpl() {
     const tab = state.tab, key = compileId + ':' + state.level;
-    if (!X) return;
+    if (!ready) return;
     if (rendered[tab] === key && tab !== 'syntax') return;
     const t = performance.now();
     if (tab === 'syntax') {
-      const root = JSON.parse(X.Syntax(state.code, settingsJson()));
-      buildTree($('tree'), root, (n) => { const s = selectionOf(n); tree.quiet = true; ed.setSel(s.start, s.end); setTimeout(() => (tree.quiet = false), 50); });
+      const root = JSON.parse(await exec.request('syntax', { code: state.code, settings: settingsJson() }));
+      buildTree($('tree'), root, (n) => { const s = selectionOf(n); tree.pickSel = s; ed.setSel(s.start, s.end); });
       revealForSelection(ed.getSel());
-    } else if (tab === 'il') outs.il.set(X.Il());
-    else if (tab === 'cs') { try { outs.cs.set(X.Decompile(state.level)); } catch (e) { outs.cs.set('// the decompiler failed: ' + e); } }
+    } else if (tab === 'il') outs.il.set(await exec.request('il'));
+    else if (tab === 'cs') { try { outs.cs.set(await exec.request('decompile', { level: state.level })); } catch (e) { outs.cs.set('// the decompiler failed: ' + e); } }
     else if (tab === 'verify') {
-      const v = JSON.parse(X.Verify()); const box = $('verifyout'); box.textContent = '';
+      const v = JSON.parse(await exec.request('verify')); const box = $('verifyout'); box.textContent = '';
       const head = document.createElement('div'); head.className = v.ok ? 'ok' : 'bad';
       head.textContent = (v.available ? (v.ok ? '✔ ' : '✘ ') : '⚠ ') + v.note + (v.available ? '  (' + Math.round(v.milliseconds) + ' ms, ILVerify)' : '');
       box.appendChild(head);
       for (const e of v.errors) { const d = document.createElement('div'); d.className = 'bad'; d.textContent = '  ' + e; box.appendChild(d); }
     } else if (tab === 'run') { $('runbtn').disabled = !last?.success; $('runinfo').textContent = last?.success ? (last.isExe ? 'Compiled ' + last.size + ' bytes. Press Run.' : 'A library: nothing to run.') : 'Fix the errors first.'; }
-    else if (tab === 'jit') renderJit($('jit'), { getAssemblyBase64: () => X.AssemblyBase64(), compiled: () => last, settings: () => ({ ...state }) });
+    else if (tab === 'jit') renderJit($('jit'), { getAssemblyBase64: () => exec.request('assemblyBase64'), compiled: () => last, settings: () => ({ ...state }) });
     rendered[tab] = key;
     (metrics.views ||= {})[tab] = Math.round(performance.now() - t);
   }
 
-  let timer = null;
-  async function refresh() {
-    if (!X) return;
+  // Compiles run one at a time in the exec worker; a compile that is still waiting when a newer text arrives is skipped, so typing never piles them up.
+  let timer = null, chain = Promise.resolve(), pendingKey = null;
+  function refresh() {
+    if (!ready) return Promise.resolve();
     state.code = ed.get();
-    const id = ++compileId, t = performance.now();
+    const key = settingsJson() + '\n' + state.code;
+    if (key === compiledKey || key === pendingKey) return chain;   // this text was compiled (or is queued) with these options already
+    pendingKey = key;
+    const id = ++compileId;
     setStatus('compiling…');
-    await nextFrame();
-    const res = JSON.parse(await X.Compile(state.code, settingsJson()));
-    if (id !== compileId) return;
-    last = res;
+    return (chain = chain.then(() => (id === compileId ? compileNow(id) : null)).catch((e) => { pendingKey = null; console.error(e); setStatus('error: ' + e.message); }));
+  }
+  async function compileNow(id) {
+    const t = performance.now(), code = state.code, settings = settingsJson();
+    const { res, assets, wire } = await exec.request('compile', { code, settings });
+    if (id !== compileId || ed.get() !== code) { if (pendingKey === settings + '\n' + code) pendingKey = null; return; }   // typed on meanwhile: its offsets do not fit the editor any more; the debounced compile follows
+    last = res; compiledKey = settings + '\n' + code;
+    if (pendingKey === compiledKey) pendingKey = null;
     const ms = Math.round(performance.now() - t);
     metrics.compiles.push({ ms, coreMs: Math.round(res.ms), bytes: res.size });
+    metrics.assets.push(...assets);
     ed.markers(res.diagnostics); showProblems(res.diagnostics);
     rendered = {};
     await renderActive();
-    if (!metrics.marks.firstView) { mark('firstView'); metrics.wireBytesAtFirstView = performance.getEntriesByType('resource').filter((r) => r.name.startsWith(location.origin)).reduce((s, r) => s + (r.encodedBodySize || 0), 0); }
+    if (!metrics.marks.firstView) { mark('firstView'); metrics.wireBytesAtFirstView = wire + performance.getEntriesByType('resource').filter((r) => r.name.startsWith(location.origin)).reduce((s, r) => s + (r.encodedBodySize || 0), 0); }
     setStatus(res.success ? 'compiled in ' + ms + ' ms' : res.diagnostics.filter((d) => d.severity === 'error').length + ' error(s)');
     syncUrlSoon();
   }
   let urlTimer = null;
   function syncUrlSoon() { clearTimeout(urlTimer); urlTimer = setTimeout(async () => { try { history.replaceState(null, '', '#' + await encodeShare(state)); } catch {} }, 600); }
-  const refreshSoon = () => { clearTimeout(timer); timer = setTimeout(refresh, 350); };
+  // IntelliSense diagnostics (squiggles) come back within ~250 ms, so once it is ready the compile (IL, C#, ...) can wait a little longer
+  const refreshSoon = () => { clearTimeout(timer); timer = setTimeout(refresh, intelliReady ? 700 : 350); };
   ed.onChange(refreshSoon);
-  ed.onCursor(() => { if (state.tab === 'syntax' && !tree.quiet) revealForSelection(ed.getSel()); });
+  ed.onCursor(() => {
+    if (state.tab !== 'syntax') return;
+    const sel = ed.getSel(), p = tree.pickSel;
+    tree.pickSel = null;
+    if (p && p.start === sel.start && p.end === sel.end) return;   // the selection the tree itself just set: it is already selected there
+    revealForSelection(sel);
+  });
 
   // controls
-  $('cfg').onchange = (e) => { state.configuration = e.target.value; state.optimize = state.configuration === 'release'; syncOptions(); refresh(); };
-  $('opt').onchange = (e) => { state.optimize = e.target.checked; refresh(); };
-  langSel.onchange = (e) => { state.langVersion = e.target.value; refresh(); };
+  const optionsChanged = () => { refresh(); intelli?.refresh(ed.model); };   // the workspace follows the options: new squiggles, colours and completions
+  $('cfg').onchange = (e) => { state.configuration = e.target.value; state.optimize = state.configuration === 'release'; syncOptions(); optionsChanged(); };
+  $('opt').onchange = (e) => { state.optimize = e.target.checked; optionsChanged(); };
+  langSel.onchange = (e) => { state.langVersion = e.target.value; optionsChanged(); };
   $('level').onchange = (e) => { state.level = Number(e.target.value); rendered = {}; renderActive(); syncUrlSoon(); };
   for (const b of document.querySelectorAll('#tabs button')) b.onclick = () => { showTab(b.dataset.tab); renderActive(); syncUrlSoon(); };
   $('runbtn').onclick = async () => {
-    if (!X || !last?.success) return;
+    if (!ready || !last?.success) return;
     $('runbtn').disabled = true; $('runinfo').textContent = 'running…'; await nextFrame();
-    const r = JSON.parse(await X.Run());
+    const r = JSON.parse(await exec.request('run'));
     const out = $('runout'); out.textContent = '';
     const o = document.createElement('span'); o.textContent = r.output; out.appendChild(o);
     if (r.error) { const e = document.createElement('div'); e.className = 'err'; e.textContent = r.error; out.appendChild(e); }
@@ -375,29 +303,43 @@ async function main() {
     window.__lastShare = url;
     const t = Object.assign(document.createElement('div'), { className: 'toast', textContent: 'Link copied (' + url.length + ' characters)' }); document.body.appendChild(t); setTimeout(() => t.remove(), 2200);
   };
-  window.__sharplab = { state, refresh, showTab: (t) => { showTab(t); return renderActive(); }, setCode: (c) => { ed.set(c); return refresh(); }, tree, revealForSelection, ed, get last() { return last; }, getRun: () => $('runbtn').click(), decode: decodeShare };
+  window.__sharplab = { state, refresh, get rendering() { return rendering; }, call, intelliReady: () => intelliReady, exec, intelliW, showTab: (t) => { showTab(t); return renderActive(); }, setCode: (c) => { ed.set(c); return refresh(); }, tree, revealForSelection, ed, get last() { return last; }, getRun: () => $('runbtn').click(), decode: decodeShare };
 
-  // runtime + references
+  // IntelliSense: providers are registered once; the intelli worker comes up after the first compile (see below)
+  let intelli = null;
+  if (ed.monaco) {
+    intelli = registerRoslyn(ed.monaco, {
+      call, ready: () => intelliReady, diagnosticsDelay: 250,
+      onStats: (name, ms) => { if (name === 'completion') metrics.completion.push(Math.round(ms)); metrics.latency[name] = Math.round(ms); },
+      // the compile already produced exactly these squiggles for this text and these options: nothing to add
+      hooks: { skipDiagnostics: (text) => (compiledKey === settingsJson() + '\n' + text ? 'keep' : false) },
+    });
+    intelli.attach(ed.model);
+  }
+  window.__sharplab.intelli = intelli;
+
+  // the runtimes
   setStatus('downloading .NET runtime…');
-  const { getAssemblyExports, getConfig, setModuleImports } = await dotnet.withDiagnosticTracing(false).withResourceLoader(loadBootResource).create();
-  setModuleImports('host', hostModule);
-  mark('runtimeCreated');
-  X = (await getAssemblyExports(getConfig().mainAssemblyName)).Interop;
-  mark('exportsReady');
-  setStatus('loading reference assemblies…');
-  const mf = await (await fetch(MANIFESTS.ref)).text();
-  refVersion = JSON.parse(mf).version; registerHashes(JSON.parse(mf));
-  for (const k of await caches.keys()) if (k.startsWith('sharplab-refs-') && k !== 'sharplab-refs-' + refVersion) await caches.delete(k);
-  const core = await getBytes('ref/core.bin', 'sharplab-refs-' + refVersion);
-  metrics.coreBundle = { bytes: core.bytes.length, from: core.from, ms: Math.round(core.ms) };
-  if (!X.AddReferenceBundle(core.bytes)) throw new Error('reference bundle contained no usable assemblies');
-  X.Configure(mf);
-  mark('refsReady');
+  exec.start();
+  await exec.request('init', { nobr: noBr });
+  ready = true;
   metrics.ready = true;
   await refresh();
   mark('firstCompileDone');
   $('runbtn').disabled = !last?.success;
   ed.focus();
+
+  // after the first compile: the IntelliSense worker boots its own runtime (the files are in the cache by now), then loads Microsoft.CodeAnalysis.Features & co.
+  try {
+    setBadge('IntelliSense: starting runtime…', 'loading');
+    intelliW.start();
+    await intelliW.request('init', { nobr: noBr });
+    await intelliW.request('loadIntellisense');
+    intelliReady = true;
+    mark('intellisenseReady');
+    setBadge('IntelliSense: ready', 'ready');
+    intelli?.refresh(ed.model);   // colours and squiggles for the text that is already there
+  } catch (e) { console.error(e); setBadge('IntelliSense: failed', ''); metrics.intellisenseError = String(e); }
 }
 main().catch((e) => { console.error(e); setStatus('error: ' + e.message); metrics.error = String(e);
   const d = document.createElement('div'); d.className = 'problems'; d.textContent = e.message; document.body.appendChild(d); });

@@ -11,7 +11,7 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="2.*" />
   </ItemGroup>
   <ItemGroup>
-    <!-- The same reference assemblies the browser app ships, so tests exercise real ref-pack compilation. -->
+    <!-- The same reference assemblies the browser apps ship. -->
     <PackageReference Include="Microsoft.NETCore.App.Ref" Version="10.0.12" GeneratePathProperty="true" PrivateAssets="all" ExcludeAssets="compile;runtime" />
     <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
       <_Parameter1>RefPackDir</_Parameter1>
@@ -19,7 +19,7 @@
     </AssemblyAttribute>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="../../src/CsRepl.Core/CsRepl.Core.csproj" />
-    <ProjectReference Include="../../../shared/Intellisense/WebBox.Intellisense.csproj" />
+    <ProjectReference Include="../../Intellisense/WebBox.Intellisense.csproj" />
+    <ProjectReference Include="../../IntelliHost/WebBox.IntelliHost.csproj" />
   </ItemGroup>
 </Project>

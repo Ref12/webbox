@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseCommand, normalizeLoadUrl, directiveSpans, handleCommand, HELP_TEXT } from '../../src/CsRepl.Wasm/wwwroot/commands.js';
-import { toHtml, paint } from '../../src/CsRepl.Wasm/wwwroot/classify.js';
+import { toHtml, paint } from '../../../shared/js/classify.js';
 
 test('commands are recognised only as a whole one-line submission', () => {
   for (const [code, kind] of [['#help', 'help'], ['  #clear  ', 'clear'], ['clear', 'clear'], ['#reset', 'reset'], ['#help // list', 'help']])

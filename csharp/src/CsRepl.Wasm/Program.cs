@@ -1,9 +1,8 @@
-using System.Reflection;
 using System.Runtime.InteropServices.JavaScript;
-using System.Runtime.Loader;
 using System.Runtime.Versioning;
 using System.Text.Json;
 using CsRepl;
+using WebBox.Intellisense;
 
 Console.WriteLine("CsRepl runtime started");
 
@@ -86,43 +85,25 @@ public static partial class Interop
         Bridge("Commit", clean);
     }
 
-    // ---- IntelliSense: Microsoft.CodeAnalysis.Features & co. arrive after first paint, as plain assemblies ----
-    private static readonly Dictionary<string, byte[]> Lazy = new(StringComparer.OrdinalIgnoreCase);
+    // ---- IntelliSense: Microsoft.CodeAnalysis.Features & co. arrive after first paint, as plain assemblies (WebBox.IntelliHost, shared with sharplab/) ----
     private static readonly List<string> _committed = new();
-    private static bool _intelliReady, _resolverHooked;
-    private static Assembly? _intelliAsm;
+    private static bool _intelliReady => IntelliHost.Ready;
+    private static object? Bridge(string method, params object[] args) => IntelliHost.Invoke(method, args);
 
-    [JSExport]
-    public static void AddLazyAssembly(string fileName, byte[] bytes)
-    {
-        Lazy[fileName] = bytes;
-        if (_resolverHooked) return;
-        _resolverHooked = true;
-        AssemblyLoadContext.Default.Resolving += (ctx, name) =>
-            Lazy.TryGetValue(name.Name + ".dll", out var b) ? ctx.LoadFromStream(new MemoryStream(b)) : null;
-    }
+    [JSExport] public static void AddLazyAssembly(string fileName, byte[] bytes) => IntelliHost.AddLazy(fileName, bytes);
 
-    /// <summary>Loads the IntelliSense assembly (and, through the resolver above, Features/Workspaces) and replays the submissions so far.</summary>
+    /// <summary>Loads the IntelliSense assembly (and, through the resolver, Features/Workspaces) and replays the submissions so far.</summary>
     [JSExport]
     public static void StartIntellisense(string entry)
     {
-        _intelliAsm = AssemblyLoadContext.Default.LoadFromStream(new MemoryStream(Lazy[entry]));
-        Bridge("Init", Refs.References);
-        _intelliReady = true;
+        IntelliHost.Start(entry, Refs.References);
         foreach (var c in _committed) Bridge("Commit", c);
     }
 
     [JSExport] public static bool IntellisenseReady() => _intelliReady;
 
-    private static object? Bridge(string method, params object[] args)
-    {
-        var t = _intelliAsm?.GetType("CsRepl.Intellisense.Bridge");
-        if (t is null) return null;
-        return t.GetMethod(method)!.Invoke(null, args);
-    }
-
     /// <summary>
-    /// op: Complete | Change | QuickInfo | Signature | Diagnostics | Classify | ClassifyCommitted. Returns JSON ("null" when not ready).
+    /// op: Complete | Describe | Change | QuickInfo | Signature | Diagnostics | Classify | ClassifyCommitted. Returns JSON ("null" when not ready).
     /// `#r` lines are blanked first (same length), as for compilation.
     /// </summary>
     [JSExport]
@@ -132,17 +113,6 @@ public static partial class Interop
         var clean = Directives.Extract(text).Code;
         if (op != "ClassifyCommitted" && _resolver is not null && await _resolver.LoadForUsingsAsync(clean))
             Bridge("SetReferences", Refs.References);
-        var task = op switch
-        {
-            "Complete" => Bridge("Complete", clean, pos, extra),
-            "Change" => Bridge("Change", clean, pos, extra),
-            "QuickInfo" => Bridge("QuickInfo", clean, pos),
-            "Signature" => Bridge("Signature", clean, pos),
-            "Diagnostics" => Bridge("Diagnostics", clean),
-            "Classify" => Bridge("Classify", clean),
-            "ClassifyCommitted" => Bridge("ClassifyCommitted", pos),
-            _ => null
-        };
-        return task is null ? "null" : await (Task<string>)task;
+        return await IntelliHost.Call(op, clean, pos, extra);
     }
 }

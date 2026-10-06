@@ -4,6 +4,13 @@ export const TYPES = ['keyword', 'keywordControl', 'class', 'struct', 'interface
   'field', 'local', 'parameter', 'event', 'namespace', 'constant', 'enumMember', 'label', 'string', 'stringEscape', 'number', 'comment',
   'operator', 'punct', 'preproc', 'xmlDoc', 'regex'];
 
+/** Visual Studio Dark colours (hex without #) per token type: the Monaco theme rules for the semantic tokens and the .t-* classes of the transcript. */
+export const VS_DARK = {
+  keyword: '569cd6', keywordControl: 'd8a0df', class: '4ec9b0', struct: '4ec9b0', delegate: '4ec9b0', typeParam: '4ec9b0', interface: 'b8d7a3', enum: 'b8d7a3',
+  method: 'dcdcdc', property: 'dcdcdc', field: 'dcdcdc', local: 'dcdcdc', event: 'dcdcdc', namespace: 'dcdcdc', constant: 'dcdcdc', enumMember: 'dcdcdc', label: 'dcdcdc',
+  parameter: '9cdcfe', string: 'd69d85', regex: 'd69d85', stringEscape: 'ffd68f', number: 'b5cea8', comment: '57a64a', xmlDoc: '608b4e', operator: 'b4b4b4', punct: 'dcdcdc', preproc: '9b9b9b',
+};
+
 const EXACT = {
   'keyword': 'keyword', 'keyword - control': 'keywordControl', 'class name': 'class', 'record class name': 'class', 'module name': 'class',
   'struct name': 'struct', 'record struct name': 'struct', 'interface name': 'interface', 'enum name': 'enum', 'delegate name': 'delegate',

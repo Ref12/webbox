@@ -1,5 +1,5 @@
 // Stages the published app (dist/wwwroot) for GitHub Pages: nothing here needs server support beyond static files.
-//   node tools/stage.mjs <dist/wwwroot> <outDir>   (copied from csharp/tools/stage.mjs, minus the lazy IntelliSense manifest)
+//   node tools/stage.mjs <dist/wwwroot> <outDir>   (copied from csharp/tools/stage.mjs)
 // 1. Compression: Pages cannot serve precompressed .br with Content-Encoding, so only the big binaries keep their .br
 //    (fetched and decoded in the page, see wwwroot/br.js); every .gz and every .br of a text file is dropped (Pages gzips text itself).
 // 2. Cache busting: GitHub Pages sends Cache-Control: max-age=600. App files get content-hashed names (main.1a2b3c4d.js, references
@@ -34,6 +34,9 @@ const refM = readJson('ref/manifest.json');
 refM.coreHash = hashOf('ref/core.bin'); refM.typesHash = hashOf('ref/types.json');
 for (const a of refM.assemblies) a.h = hashOf('ref/a/' + a.name);
 fs.writeFileSync(path.join(out, 'ref/manifest.json'), JSON.stringify(refM));
+const lazyM = readJson('lazy/manifest.json');   // IntelliSense assemblies (tools/PrepareLazy.cs)
+for (const x of lazyM.files) x.h = hashOf('lazy/' + x.name);
+fs.writeFileSync(path.join(out, 'lazy/manifest.json'), JSON.stringify(lazyM));
 
 
 // ---- 2b. fingerprint the app files ----
@@ -57,11 +60,12 @@ while (done.size < targets.length) {
       const from = path.posix.relative(path.posix.dirname(ready), t), to = path.posix.relative(path.posix.dirname(ready), name.get(t));
       text = text.replace(new RegExp('(?<![\\w./-])(\\./)?' + escape(from) + '(?![\\w.-])', 'g'), (m, dot) => (dot ?? '') + to);
     }
-    if (ready === 'main.js') {
-      const need = (s, r) => { if (!text.includes(s)) throw new Error('main.js: expected ' + s); text = text.replace(s, r); };
-      need("const BUILD = 'dev';", "const BUILD = '" + dotnetJsHash + "';");
+    if (ready === 'config.js') {
+      const need = (s, r) => { if (!text.includes(s)) throw new Error('config.js: expected ' + s); text = text.replace(s, r); };
+      need("export const BUILD = 'dev';", "export const BUILD = '" + dotnetJsHash + "';");
       need("ref: 'ref/manifest.json'", "ref: 'ref/manifest.json?h=" + hashOf('ref/manifest.json') + "'");
-      need("'./_framework/dotnet.js'", "'./_framework/dotnet.js?h=" + dotnetJsHash + "'");
+      need("lazy: 'lazy/manifest.json'", "lazy: 'lazy/manifest.json?h=" + hashOf('lazy/manifest.json') + "'");
+      need("st: './_framework/dotnet.js'", "st: './_framework/dotnet.js?h=" + dotnetJsHash + "'");
     }
     buf = Buffer.from(text);
   }

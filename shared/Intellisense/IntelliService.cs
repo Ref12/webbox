@@ -8,7 +8,7 @@ using Microsoft.CodeAnalysis.Host.Mef;
 using Microsoft.CodeAnalysis.QuickInfo;
 using Microsoft.CodeAnalysis.Text;
 
-namespace CsRepl.Intellisense;
+namespace WebBox.Intellisense;
 
 public sealed record CompletionDto(string Label, string Insert, string Kind, string Filter, string Sort, string[] Commit, bool IsSnippet, string? Detail);
 public sealed record CompletionResultDto(int Start, int Length, CompletionDto[] Items);
@@ -19,27 +19,33 @@ public sealed record DiagnosticDto(int Start, int Length, string Severity, strin
 public sealed record ClassifiedSpanDto(int Start, int Length, string Type);
 
 /// <summary>
-/// Roslyn language services over an AdhocWorkspace that holds the REPL's submissions as a chain of submission projects
-/// (each one references the previous). Completion, quick info and classification use the public Features/Workspaces
+/// Roslyn language services over an AdhocWorkspace. In script mode (the REPL) it holds the submissions as a chain of submission projects
+/// (each one references the previous); in regular mode (SharpLab) the edited text is one document of one project. IntelliOptions
+/// (language version, configuration, document kind...) decide how the project is parsed and compiled, so answers match the host's compile. Completion, quick info and classification use the public Features/Workspaces
 /// services (CompletionService, QuickInfoService, Classifier); signature help is built from the semantic model because
 /// SignatureHelpService is internal to Features. Diagnostics come from the compilation.
 /// </summary>
 public sealed class IntelliService
 {
-    private static readonly string[] DefaultImports =
-        { "System", "System.IO", "System.Linq", "System.Collections.Generic", "System.Threading.Tasks", "System.Text" };
-
     private readonly AdhocWorkspace _ws;
     private IReadOnlyList<MetadataReference> _refs;
     private readonly List<string> _submissions = new();
     private ProjectId? _lastCommitted;
     private readonly List<DocumentId> _committedDocs = new();
     private ProjectId? _scratch;
-    private static readonly CSharpParseOptions Parse = new(LanguageVersion.Latest, kind: SourceCodeKind.Script);
+    private DocumentId? _scratchDoc;
+    private OutputKind _scratchOutput;
+    private string _scratchText = "";
+    private IntelliOptions _opts;
+    private CSharpParseOptions _parse;
+    // the last completion list, so resolving an item's description does not compute it again
+    private (string Text, int Pos, Document Doc, CompletionList List)? _lastCompletion;
 
-    public IntelliService(IEnumerable<MetadataReference> refs)
+    public IntelliService(IEnumerable<MetadataReference> refs, IntelliOptions? options = null)
     {
         _refs = refs.ToList();
+        _opts = options ?? new IntelliOptions();
+        _parse = _opts.ToParseOptions();
         var asms = new List<Assembly>();
         foreach (var n in new[] { "Microsoft.CodeAnalysis.Workspaces", "Microsoft.CodeAnalysis.CSharp.Workspaces",
                      "Microsoft.CodeAnalysis.Features", "Microsoft.CodeAnalysis.CSharp.Features" })
@@ -60,6 +66,18 @@ public sealed class IntelliService
         MefHostServices.Create(new System.Composition.Hosting.ContainerConfiguration().WithParts(HostPartTypes(assemblies)).CreateContainer());
 
     public int SubmissionCount => _submissions.Count;
+    public IntelliOptions Options => _opts;
+
+    /// <summary>Change the options (language version, configuration, document kind...). A change that matters drops the workspace content; script submissions are replayed.</summary>
+    public bool Configure(IntelliOptions options)
+    {
+        if (options == _opts) return false;
+        _opts = options; _parse = options.ToParseOptions();
+        var chain = _submissions.ToList();
+        Reset();
+        if (_opts.IsScript) foreach (var c in chain) Commit(c);
+        return true;
+    }
 
     /// <summary>Replace the reference set (after assemblies were loaded on demand).</summary>
     public void SetReferences(IEnumerable<MetadataReference> refs)
@@ -67,25 +85,25 @@ public sealed class IntelliService
         _refs = refs.ToList();
         var chain = _submissions.ToList();
         Reset();
-        foreach (var s in chain) Commit(s);
+        foreach (var s in chain) Commit(s);   // (regular mode: nothing committed, the scratch project is rebuilt with the new references on the next request)
     }
 
     public void Reset()
     {
         _ws.ClearSolution();
-        _submissions.Clear(); _committedDocs.Clear(); _lastCommitted = null; _scratch = null;
+        _submissions.Clear(); _committedDocs.Clear(); _lastCommitted = null; _scratch = null; _scratchDoc = null; _lastCompletion = null;
     }
 
-    private ProjectId AddSubmissionProject(string code, ProjectId? previous, out DocumentId docId)
+    private ProjectId AddSubmissionProject(string code, ProjectId? previous, out DocumentId docId, OutputKind output = OutputKind.DynamicallyLinkedLibrary)
     {
         var pid = ProjectId.CreateNewId();
         docId = DocumentId.CreateNewId(pid);
-        var opts = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, usings: DefaultImports,
-            concurrentBuild: false).WithMetadataImportOptions(MetadataImportOptions.All);
-        var info = ProjectInfo.Create(pid, VersionStamp.Create(), "Sub" + pid.Id.ToString("N"), "Sub" + pid.Id.ToString("N"),
-            LanguageNames.CSharp, compilationOptions: opts, parseOptions: Parse, metadataReferences: _refs,
-            projectReferences: previous is null ? null : new[] { new ProjectReference(previous) }, isSubmission: true)
-            .WithDocuments(new[] { DocumentInfo.Create(docId, "s.csx", sourceCodeKind: SourceCodeKind.Script,
+        var script = _opts.IsScript;
+        var name = (script ? "Sub" : "App") + pid.Id.ToString("N");
+        var info = ProjectInfo.Create(pid, VersionStamp.Create(), name, name,
+            LanguageNames.CSharp, compilationOptions: _opts.ToCompilationOptions(output), parseOptions: _parse, metadataReferences: _refs,
+            projectReferences: previous is null ? null : new[] { new ProjectReference(previous) }, isSubmission: script)
+            .WithDocuments(new[] { DocumentInfo.Create(docId, script ? "s.csx" : "Program.cs", sourceCodeKind: script ? SourceCodeKind.Script : SourceCodeKind.Regular,
                 loader: TextLoader.From(TextAndVersion.Create(SourceText.From(code), VersionStamp.Create()))) });
         _ws.AddProject(info);
         return pid;
@@ -94,15 +112,36 @@ public sealed class IntelliService
     /// <summary>Record a successfully executed submission; later editing contexts chain after it.</summary>
     public void Commit(string code)
     {
+        DropScratch();
         _lastCommitted = AddSubmissionProject(code, _lastCommitted, out var d);
         _committedDocs.Add(d);
         _submissions.Add(code);
     }
 
-    private Document Scratch(string text)
+    private void DropScratch()
     {
         if (_scratch is { } old) _ws.TryApplyChanges(_ws.CurrentSolution.RemoveProject(old));
-        _scratch = AddSubmissionProject(text, _lastCommitted, out var d);
+        _scratch = null; _scratchDoc = null; _lastCompletion = null;
+    }
+
+    /// <summary>
+    /// The document being edited. While nothing around it changed (options, references, committed submissions) and the output kind is the same,
+    /// the project is kept and only the text is replaced, so Roslyn reuses the compilation it already built for the unchanged parts.
+    /// </summary>
+    private Document Scratch(string text)
+    {
+        var output = _opts.ResolveOutput(text);
+        if (_scratch is not null && _scratchDoc is { } id && output == _scratchOutput)
+        {
+            if (_scratchText == text) return _ws.CurrentSolution.GetDocument(id)!;
+            _scratchText = text;
+            _ws.TryApplyChanges(_ws.CurrentSolution.WithDocumentText(id, SourceText.From(text)));
+            _lastCompletion = null;
+            return _ws.CurrentSolution.GetDocument(id)!;
+        }
+        DropScratch();
+        _scratch = AddSubmissionProject(text, _lastCommitted, out var d, output);
+        _scratchDoc = d; _scratchOutput = output; _scratchText = text;
         return _ws.CurrentSolution.GetDocument(d)!;
     }
 
@@ -117,6 +156,7 @@ public sealed class IntelliService
         if (trigger is not null && !svc.ShouldTriggerCompletion(await doc.GetTextAsync(), pos, t)) return null;
         var list = await svc.GetCompletionsAsync(doc, pos, t);
         if (list is null || list.ItemsList.Count == 0) return null;
+        _lastCompletion = (text, pos, doc, list);
         var items = new List<CompletionDto>();
         foreach (var i in list.ItemsList)
         {
@@ -143,6 +183,20 @@ public sealed class IntelliService
         var ch = await svc.GetChangeAsync(doc, item);
         var tc = ch.TextChange;
         return (tc.Span.Start, tc.Span.Length, tc.NewText ?? "", ch.NewPosition);
+    }
+
+    /// <summary>The documentation Roslyn shows next to a completion item (signature plus summary); null when there is none.</summary>
+    public async Task<string?> DescribeAsync(string text, int pos, string label)
+    {
+        pos = Math.Clamp(pos, 0, text.Length);
+        var doc = Scratch(text);
+        var svc = CompletionService.GetService(doc);
+        if (svc is null) return null;
+        var list = _lastCompletion is { } c && c.Text == text && c.Pos == pos ? c.List : await svc.GetCompletionsAsync(doc, pos);
+        var item = list?.ItemsList.FirstOrDefault(i => i.DisplayText == label);
+        if (item is null) return null;
+        var d = await svc.GetDescriptionAsync(doc, item);
+        return d is { Text.Length: > 0 } ? d.Text : null;
     }
 
     // ---- quick info ----

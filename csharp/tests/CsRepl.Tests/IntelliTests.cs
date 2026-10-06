@@ -1,4 +1,4 @@
-using CsRepl.Intellisense;
+using WebBox.Intellisense;
 using Xunit;
 
 namespace CsRepl.Tests;

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { tokenType, paint, toHtml, toSemanticTokens, TYPES } from '../../src/CsRepl.Wasm/wwwroot/classify.js';
+import { tokenType, paint, toHtml, toSemanticTokens, TYPES } from '../../js/classify.js';
 
 test('Roslyn names map to token types', () => {
   assert.equal(tokenType('class name'), 'class'); assert.equal(tokenType('method name'), 'method');

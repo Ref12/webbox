@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Microsoft.CodeAnalysis;
 
-namespace CsRepl.Intellisense;
+namespace WebBox.Intellisense;
 
 /// <summary>
 /// String-in/string-out entry points. The wasm app does not reference this assembly (it is loaded lazily after first paint,
@@ -15,6 +15,13 @@ public static class Bridge
     private static readonly SemaphoreSlim Gate = new(1, 1);
 
     public static void Init(IEnumerable<MetadataReference> refs) => _svc = new IntelliService(refs);
+    /// <summary>Options as JSON (see IntelliOptions); a no-op when they did not change. Call it between requests, not during one.</summary>
+    public static async Task Configure(string optionsJson)
+    {
+        await Gate.WaitAsync();
+        try { _svc!.Configure(IntelliOptions.Parse(optionsJson)); }
+        finally { Gate.Release(); }
+    }
     public static void SetReferences(IEnumerable<MetadataReference> refs) => _svc!.SetReferences(refs);
     public static void Commit(string code) => _svc!.Commit(code);
     public static void Reset() => _svc!.Reset();
@@ -27,6 +34,7 @@ public static class Bridge
     }
 
     public static Task<string> Complete(string text, int pos, string trigger) => Run(s => s.CompleteAsync(text, pos, trigger.Length > 0 ? trigger[0] : null));
+    public static Task<string> Describe(string text, int pos, string label) => Run(s => s.DescribeAsync(text, pos, label));
     public static Task<string> Change(string text, int pos, string label) => Run(async s => await s.GetChangeAsync(text, pos, label));
     public static Task<string> QuickInfo(string text, int pos) => Run(s => s.QuickInfoAsync(text, pos));
     public static Task<string> Signature(string text, int pos) => Run(s => s.SignatureHelpAsync(text, pos));

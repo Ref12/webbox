@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import { RuntimeClient, CancelledError, serve, batcher, SessionLog } from '../../src/CsRepl.Wasm/wwwroot/protocol.js';
+import { RuntimeClient, CancelledError, serve, batcher, SessionLog } from '../../js/protocol.js';
 
 // an in-memory "worker": the client posts to handlers served by serve(), answers come back through the same message plumbing
 function fakeWorld(handlers) {
