@@ -15,7 +15,7 @@ const target = process.env.TARGET || 'pages';
 const server = target === 'cloudflare'
   ? spawn(process.execPath, [path.resolve('..', 'cf-sim.mjs'), site, String(port)], { stdio: 'inherit' })
   : spawn(process.execPath, [path.resolve('..', 'pages-sim.mjs'), site, String(port), '/webbox', '--gzip=' + (process.env.GZIP || 'text')], { stdio: 'inherit' });
-const BASE = 'http://localhost:' + port + (target === 'cloudflare' ? '/csharp/' : '/webbox/csharp/');
+const BASE = 'http://localhost:' + port + (target === 'cloudflare' ? '/csharp/' : '/webbox/csharp/') + (process.env.AOT ? '?aot=1' : '');
 await new Promise((r) => setTimeout(r, 800));
 const exe = process.env.CHROME_PATH || ['/usr/bin/chromium', '/usr/bin/google-chrome'].find((p) => fs.existsSync(p));
 const browser = await chromium.launch({ executablePath: exe, args: ['--no-sandbox'] });
