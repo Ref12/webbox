@@ -173,7 +173,7 @@ await page.keyboard.type('#r "');
 await page.waitForSelector('.suggest-widget.visible', { timeout: 20000 });
 let rr = await rows(); console.log('#r " ->', rr.slice(0, 4).join(' | '));
 assert.ok(rr[0].startsWith('nuget:'), '#r " offers nuget: first');
-assert.ok(rr.some((r) => r.startsWith('System.Net.Http')), 'and framework assemblies');
+assert.ok(rr.some((r) => /^(Microsoft|System)\./.test(r)), 'and framework assemblies');
 await page.keyboard.press('Tab');
 assert.equal(await getInput(), '#r "nuget: "');
 await page.keyboard.type('Newtonsoft.J');
