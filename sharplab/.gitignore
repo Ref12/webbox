@@ -1,0 +1,6 @@
+bin/
+obj/
+node_modules/
+dist/
+*.user
+src/SharpLab.Wasm/wwwroot/ref/
