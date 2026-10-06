@@ -17,7 +17,8 @@ public static class Runner
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var output = new StringWriter();
         var oldOut = Console.Out; var oldErr = Console.Error; var oldIn = Console.In;
-        var alc = new AssemblyLoadContext("sharplab-run", isCollectible: true);
+        // Collectible contexts are not supported by the browser runtime (PlatformNotSupported); a plain one per run leaks the (small) assembly until reload.
+        var alc = CreateContext();
         try
         {
             Console.SetOut(output); Console.SetError(output); Console.SetIn(new StringReader(""));
@@ -38,7 +39,7 @@ public static class Runner
         finally
         {
             Console.SetOut(oldOut); Console.SetError(oldErr); Console.SetIn(oldIn);
-            try { alc.Unload(); } catch (InvalidOperationException) { }
+            if (alc.IsCollectible) try { alc.Unload(); } catch (InvalidOperationException) { }
             Gate.Release();
         }
     }
