@@ -1,16 +1,17 @@
 // Headless-browser end-to-end check of the published site.
-// Usage: node run.mjs <publishedWwwroot> [screenshotDir] [metrics.json]
+// Usage: node run.mjs <stagedSite> [screenshotDir] [metrics.json]   (stagedSite = the folder that contains csharp/, i.e. _site; served under /webbox/ like GitHub Pages)
 import { chromium } from 'playwright-core';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 
-const site = path.resolve(process.argv[2] ?? '../../dist/wwwroot');
+const site = path.resolve(process.argv[2] ?? '../../_site');
 const shotDir = path.resolve(process.argv[3] ?? '../../docs');
 const metricsOut = process.argv[4] ?? '../../docs/metrics.json';
 const port = 8123;
-const server = spawn(process.execPath, [path.resolve('..', 'serve.mjs'), site, String(port)], { stdio: 'inherit' });
+const server = spawn(process.execPath, [path.resolve('..', 'pages-sim.mjs'), site, String(port), '/webbox', '--gzip=' + (process.env.GZIP || 'text')], { stdio: 'inherit' });
+const BASE = 'http://localhost:' + port + '/webbox/csharp/';
 await new Promise((r) => setTimeout(r, 800));
 const exe = process.env.CHROME_PATH || ['/usr/bin/chromium', '/usr/bin/google-chrome'].find((p) => fs.existsSync(p));
 const browser = await chromium.launch({ executablePath: exe, args: ['--no-sandbox'] });
@@ -30,8 +31,9 @@ page.on('response', async (r) => {
 // flaky network: the first requests for core.bin and one runtime file fail with 504; the app must retry and still load
 let failed = 0;
 await page.route(/core\.bin|System\.Linq\.[^/]*\.wasm$/, (route) => (failed++ < 2 ? route.fulfill({ status: 504, body: 'gateway timeout' }) : route.continue()));
+const notFound = []; page.on('response', (r) => { if (r.status() === 404) notFound.push(r.url()); });
 const t0 = Date.now();
-await page.goto('http://localhost:' + port + '/');
+await page.goto(BASE);
 await page.waitForFunction(() => window.__metrics?.ready || window.__metrics?.error, null, { timeout: 240000 });
 const wireAtFirstResult = { ...wire };
 let m = await page.evaluate(() => window.__metrics);
@@ -168,7 +170,7 @@ await page.screenshot({ path: path.join(shotDir, 'screenshot.png') });
 await page.keyboard.press('Escape');
 const phone = await browser.newContext({ viewport: { width: 390, height: 780 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
 const p2 = await phone.newPage();
-await p2.goto('http://localhost:' + port + '/');
+await p2.goto(BASE);
 await p2.waitForFunction(() => window.__metrics?.marks.intellisenseReady || window.__metrics?.error, null, { timeout: 300000 });
 await p2.evaluate(() => window.__submit('var greeting = "hello phone";\nConsole.WriteLine(greeting.ToUpper());\ngreeting.Length'));
 await p2.waitForTimeout(800);
@@ -177,7 +179,7 @@ await p2.screenshot({ path: path.join(shotDir, 'screenshot-phone.png') });
 // ---------- warm reload: caches populated ----------
 const warmWire = { ...wire }; for (const k of Object.keys(wire)) wire[k] = 0;
 const tw = Date.now();
-await page.goto('http://localhost:' + port + '/');
+await page.goto(BASE);
 await page.waitForFunction(() => window.__metrics?.marks.intellisenseReady || window.__metrics?.error, null, { timeout: 300000 });
 const warm = await page.evaluate(() => window.__metrics);
 const out = { cold: { marks: m.marks, firstResultMs: m.firstResultMs, firstCompletionMs: m.firstCompletionMs, lazy: m.lazy, coreBundle: m.coreBundle, wireBytesAtFirstResult: wireAtFirstResult, wireBytesTotalAfterIntelliSense: warmWire },
@@ -186,4 +188,5 @@ const out = { cold: { marks: m.marks, firstResultMs: m.firstResultMs, firstCompl
 fs.writeFileSync(path.resolve(metricsOut), JSON.stringify(out, null, 1));
 console.log('metrics written', metricsOut);
 await browser.close(); server.kill();
+assert.deepEqual(notFound.filter((u) => !/favicon/.test(u)), [], 'no 404s');
 console.log('E2E OK');
