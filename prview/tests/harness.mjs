@@ -4,7 +4,6 @@ import { serve } from './serve.mjs';
 
 export const FIXTURE = new URL('./fixtures/dotnet-runtime-135064.json', import.meta.url).pathname;
 export const PR = '#/dotnet/runtime/pull/135064';
-export const PROXY = 'https://cors-proxy.ref12cf.workers.dev';
 export const ME = { login: 'octo-reviewer', name: 'Octo Reviewer', avatar_url: 'https://avatars.githubusercontent.com/u/1?v=4' };
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
 const CORS = { 'access-control-allow-origin': '*', 'access-control-expose-headers': 'x-ratelimit-limit, x-ratelimit-remaining, x-ratelimit-reset' };
@@ -15,21 +14,20 @@ const CORS = { 'access-control-allow-origin': '*', 'access-control-expose-header
  * signedIn: true puts a (fake) token and user in localStorage. h.on(method, regex, fn) adds a mock: fn({url, method, body, json}) returns
  * a JSON value, or {status, json|body, headers}. h.calls lists every non-GET and every mocked request.
  */
-export async function start({ viewport = { width: 1600, height: 1000 }, fixture = FIXTURE, mobile = false, signedIn = false, settings = null, view = 'all' } = {}) {
+export async function start({ viewport = { width: 1600, height: 1000 }, fixture = FIXTURE, mobile = false, signedIn = false, view = 'all' } = {}) {
   const { srv, port } = await serve();
   const br = await chromium.launch({ executablePath: '/usr/bin/chromium', args: ['--no-sandbox'] });
   const ctx = await br.newContext({ viewport, isMobile: mobile, hasTouch: mobile, serviceWorkers: 'block', permissions: ['clipboard-read', 'clipboard-write'] });
-  if (signedIn || settings || view) await ctx.addInitScript(({ signedIn, settings, view, ME }) => {
+  if (signedIn || view) await ctx.addInitScript(({ signedIn, view, ME }) => {
     if (sessionStorage.getItem('__seeded')) return; sessionStorage.setItem('__seeded', '1');
-    if (signedIn) { localStorage.setItem('prview.token', 'gho_faketoken'); localStorage.setItem('prview.auth', 'oauth'); localStorage.setItem('prview.user', JSON.stringify({ login: ME.login, name: ME.name, avatar: ME.avatar_url })); }
-    if (settings) localStorage.setItem('prview.settings', JSON.stringify(settings));
+    if (signedIn) { localStorage.setItem('prview.token', 'gho_faketoken'); localStorage.setItem('prview.user', JSON.stringify({ login: ME.login, name: ME.name, avatar: ME.avatar_url })); }
     if (view) localStorage.setItem('prview.view', JSON.stringify(view));   // legacy tests exercise the stacked view; pass view: null for the real default (one file)
-  }, { signedIn, settings, view, ME });
+  }, { signedIn, view, ME });
   setTimeout(() => { br.close().catch(() => {}); srv.close(); }, 150000).unref();   // safety net: a failed test must not leave Chromium keeping the runner alive
   const rec = JSON.parse(fs.readFileSync(fixture, 'utf8'));
   const misses = [], seen = [], calls = [], mocks = [];
   const on = (method, re, fn) => mocks.unshift({ method, re, fn });
-  await ctx.route(/^https:\/\/(api\.github\.com|raw\.githubusercontent\.com|avatars\.githubusercontent\.com|cors-proxy\.ref12cf\.workers\.dev|proxy\.test)\//, async route => {
+  await ctx.route(/^https:\/\/(api\.github\.com|raw\.githubusercontent\.com|avatars\.githubusercontent\.com)\//, async route => {
     const rq = route.request(), url = rq.url(), method = rq.method();
     seen.push(url);
     if (/avatars\.githubusercontent/.test(url)) return route.fulfill({ status: 200, body: PNG, contentType: 'image/png', headers: CORS });

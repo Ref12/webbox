@@ -1,7 +1,7 @@
-// Unit tests for the v2 libraries: device flow, review threads, REST/GraphQL write calls, list queries, Markdown safety.
+// Unit tests for the v2 libraries: review threads, REST/GraphQL write calls, list queries, Markdown safety.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DeviceFlow, AuthError, loadSettings, saveSettings, getSession, setSession, clearSession, DEFAULT_PROXY, GRANT } from '../lib/auth.js';
+import { getSession, setSession, clearSession } from '../lib/auth.js';
 import { buildThreads, indexThreads, parsePatch, lineInDiff, pendingThread, excerpt, lineRange } from '../lib/threads.js';
 import { GitHub, GhError, prQuery, rowFromGraphql, rowFromRest } from '../lib/github.js';
 import { mdLite } from '../lib/render.js';
@@ -10,42 +10,14 @@ import { parseRepo } from '../lib/home.js';
 const mem = () => { const m = new Map(); return { getItem: k => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: k => m.delete(k), m }; };
 const res = (status, json, headers = {}) => new Response(typeof json === 'string' ? json : JSON.stringify(json), { status, headers });
 
-test('device flow: posts to <proxy>/github.com/..., polls, honours slow_down, returns the token', async () => {
-  const calls = [], answers = [{ error: 'authorization_pending' }, { error: 'slow_down', interval: 9 }, { access_token: 'gho_x' }], sleeps = [];
-  const f = async (url, init) => { calls.push({ url, init }); return url.endsWith('/device/code') ? res(200, { device_code: 'D', user_code: 'ABCD-1234', verification_uri: 'https://github.com/login/device', expires_in: 900, interval: 5 }) : res(200, answers.shift()); };
-  const flow = new DeviceFlow({ clientId: 'cid', proxy: 'https://p.example/', scope: 'public_repo', fetchImpl: f, sleep: async ms => sleeps.push(ms) });
-  const dev = await flow.start();
-  assert.equal(dev.user_code, 'ABCD-1234');
-  assert.equal(calls[0].url, 'https://p.example/github.com/login/device/code');
-  assert.equal(calls[0].init.method, 'POST'); assert.equal(calls[0].init.headers.Accept, 'application/json');
-  assert.equal(calls[0].init.body, 'client_id=cid&scope=public_repo');
-  assert.equal(await flow.poll(dev), 'gho_x');
-  assert.equal(calls[1].url, 'https://p.example/github.com/login/oauth/access_token');
-  assert.equal(new URLSearchParams(calls[1].init.body).get('grant_type'), GRANT);
-  assert.equal(new URLSearchParams(calls[1].init.body).get('device_code'), 'D');
-  assert.deepEqual(sleeps, [5000, 5000, 9000]);
-});
-test('device flow: errors become readable AuthErrors', async () => {
-  const mk = (status, body) => new DeviceFlow({ clientId: 'c', fetchImpl: async () => res(status, body), sleep: async () => {} });
-  await assert.rejects(mk(200, { error: 'device_flow_disabled' }).start(), e => e instanceof AuthError && e.code === 'device_flow_disabled' && /Enable Device Flow/.test(e.message));
-  await assert.rejects(mk(403, 'target host not allowed').start(), e => e.code === 'proxy' && /ALLOWED_HOSTS/.test(e.message));
-  await assert.rejects(new DeviceFlow({ clientId: 'c', fetchImpl: async () => { throw new TypeError('Failed to fetch'); } }).start(), e => e.code === 'network' && /CORS proxy/.test(e.message));
-  await assert.rejects(mk(200, { error: 'access_denied' }).poll({ device_code: 'd', interval: 1, expires_in: 900 }), e => e.code === 'access_denied');
-  await assert.rejects(mk(200, { error: 'expired_token' }).poll({ device_code: 'd', interval: 1, expires_in: 900 }), e => e.code === 'expired_token');
-  assert.throws(() => new DeviceFlow({}), e => e.code === 'no_client_id');
-  let n = 0;
-  await assert.rejects(new DeviceFlow({ clientId: 'c', fetchImpl: async () => res(200, { error: 'authorization_pending' }), sleep: async () => {} }).poll({ device_code: 'd', interval: 1 }, { isCancelled: () => n++ > 1 }), e => e.code === 'cancelled');
-});
-test('settings and session storage', () => {
+test('session storage: a pasted token and its user, sign-out clears old keys too', () => {
   const s = mem();
-  assert.deepEqual(loadSettings(s), { clientId: '', proxy: DEFAULT_PROXY, scope: 'repo' });
-  saveSettings({ clientId: ' abc ', proxy: 'https://x.dev/', scope: 'public_repo' }, s);
-  assert.deepEqual(loadSettings(s), { clientId: 'abc', proxy: 'https://x.dev', scope: 'public_repo' });
   assert.deepEqual(getSession(s), { token: '', user: null, kind: '' });
-  setSession({ token: 't', user: { login: 'me', avatar_url: 'u' }, kind: 'oauth' }, s);
-  assert.deepEqual(getSession(s), { token: 't', user: { login: 'me', name: '', avatar: 'u' }, kind: 'oauth' });
-  clearSession(s); assert.equal(getSession(s).token, '');
-  s.setItem('prview.token', 'old-pasted'); assert.equal(getSession(s).kind, 'paste', 'a v1 token counts as pasted');
+  setSession({ token: 't', user: { login: 'me', avatar_url: 'u' } }, s);
+  assert.deepEqual(getSession(s), { token: 't', user: { login: 'me', name: '', avatar: 'u' }, kind: 'paste' });
+  s.setItem('prview.settings', '{"clientId":"x"}'); s.setItem('prview.auth', 'oauth');
+  clearSession(s); assert.equal(getSession(s).token, ''); assert.equal(s.getItem('prview.settings'), null); assert.equal(s.getItem('prview.auth'), null);
+  s.setItem('prview.token', 'old-pasted'); assert.equal(getSession(s).kind, 'paste');
 });
 
 test('patch hunks decide where a comment can go', () => {

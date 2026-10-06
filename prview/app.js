@@ -4,7 +4,7 @@ import { diffFile, layoutRows, wordDiff } from './lib/diff.js';
 import { buildTree, flattenTree, orderedFiles, STATUS } from './lib/tree.js';
 import { parsePrRef, parseRoute, toRoute, githubUrl } from './lib/url.js';
 import { esc, lineHtml, mdLite, ago, shortSha, externalLink } from './lib/render.js';
-import { getSession, setSession, clearSession, loadSettings } from './lib/auth.js';
+import { getSession, setSession, clearSession } from './lib/auth.js';
 import { signInDialog, settingsDialog as settingsUi } from './lib/signin.js';
 import { renderHome } from './lib/home.js';
 import { buildThreads, pendingThread, indexThreads, parsePatch, lineInDiff, excerpt, lineRange } from './lib/threads.js';
@@ -31,7 +31,7 @@ function banner(html) { const b = $('#banner'); b.innerHTML = html || ''; b.hidd
 function showError(e) {
   if (e instanceof GhError && e.kind === 'rate') {
     const when = e.reset ? ' It resets at ' + new Date(e.reset).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '.' : '';
-    banner('<b>Rate limit reached.</b> ' + esc(e.message) + when + (e.authed ? ' Signed in you get 5,000 per hour.' : ' Signing in raises the limit to 5,000 requests per hour. <button data-act="signin">Sign in with GitHub</button>'));
+    banner('<b>Rate limit reached.</b> ' + esc(e.message) + when + (e.authed ? ' With a token you get 5,000 per hour.' : ' A GitHub token raises the limit to 5,000 requests per hour. <button data-act="signin">Add a token</button>'));
   } else banner(esc(e.message || String(e)) + (e.kind === 'auth' ? ' <button data-act="signin">Sign in again</button>' : e.kind === 'notfound' ? (auth.token ? ' <button data-act="settings">Settings</button>' : ' <button data-act="signin">Sign in</button> to open private repositories.') : e.kind === 'forbidden' ? ' <button data-act="signin">Sign in again</button>' : ''));
 }
 function showRate(r) {
@@ -41,23 +41,23 @@ function showRate(r) {
   el.style.color = r.remaining < 8 ? 'var(--bad)' : '';
 }
 function openDialog(html) { const d = $('#dlg'); d.innerHTML = html; if (!d.open) d.showModal(); return d; }
-// ---------------------------------------------------------------- sign in (OAuth device flow), settings, who
-async function finishSignIn(token, kind) {
+// ---------------------------------------------------------------- sign in (pasted token), settings, who
+async function finishSignIn(token) {
   // verify the token and learn who it belongs to before keeping it
   const gh = new GitHub({ token });
   let user;
   try { user = await gh.user(); } catch (e) { if (e.kind === 'auth') throw new Error('GitHub rejected that token.'); user = null; /* rate limit or network: keep the token, no avatar */ }
-  setSession({ token, user, kind });
+  setSession({ token, user });
   auth = getSession();
   $('#dlg').open && $('#dlg').close();
   location.reload();
 }
-function signIn() { closePopovers(); signInDialog({ openDialog, finish: finishSignIn, pasteToken: settingsDialog }); }
+function signIn() { closePopovers(); signInDialog({ openDialog, finish: finishSignIn }); }
 function signOut() { clearSession(); auth = getSession(); location.reload(); }
-function settingsDialog() { settingsUi({ view: defaultView(), setView, openDialog, session: auth, finish: finishSignIn, signOut, signIn }); }
+function settingsDialog() { settingsUi({ view: defaultView(), setView, openDialog, session: auth, finish: finishSignIn, signOut }); }
 function renderWho() {
   const el = $('#who');
-  if (!auth.token) { el.innerHTML = '<button id="signin-btn" class="on" title="Sign in with GitHub">Sign in</button>'; $('#signin-btn').onclick = signIn; return; }
+  if (!auth.token) { el.innerHTML = '<button id="signin-btn" class="on" title="Add a GitHub token to comment">Sign in</button>'; $('#signin-btn').onclick = signIn; return; }
   const u = auth.user;
   el.innerHTML = `<button id="who-btn" class="who" title="Signed in${u ? ' as ' + esc(u.login) : ''}" aria-haspopup="menu">${u && u.avatar ? `<img class="av" src="${esc(u.avatar)}" alt="" width="22" height="22" referrerpolicy="no-referrer">` : ''}<b id="who-login">${esc(u ? u.login : 'token')}</b> ▾</button>`;
   $('#who-btn').onclick = () => {
@@ -65,7 +65,7 @@ function renderWho() {
     closePopovers();
     const r = $('#who-btn').getBoundingClientRect(), pop = document.createElement('div');
     pop.className = 'pop'; pop.id = 'whomenu'; pop.style.right = '8px'; pop.style.top = r.bottom + 4 + 'px'; pop.style.minWidth = '200px';
-    pop.innerHTML = `<div class="hint">Signed in${u ? ' as <b>' + esc(u.login) + '</b>' : ''}<br>${auth.kind === 'oauth' ? 'GitHub sign-in' : 'pasted token'}</div><div class="opt" data-w="settings">Settings</div><div class="opt" data-w="out" id="signout">Sign out</div>`;
+    pop.innerHTML = `<div class="hint">Signed in${u ? ' as <b>' + esc(u.login) + '</b>' : ''}<br>pasted token</div><div class="opt" data-w="settings">Settings</div><div class="opt" data-w="out" id="signout">Sign out</div>`;
     pop.onclick = e => { const w = e.target.closest('[data-w]'); if (!w) return; closePopovers(); w.dataset.w === 'out' ? signOut() : settingsDialog(); };
     document.body.appendChild(pop);
     setTimeout(() => document.addEventListener('click', outsideClose, true), 0);
@@ -120,7 +120,7 @@ function landing(params = {}) {
     <p>Review a GitHub pull request the way Azure DevOps shows it: a file tree with change badges, full-file diffs with expandable context, inline or side-by-side, reviewed checkboxes and a commit picker.</p>
     <form id="land-form"><input id="land-in" type="text" placeholder="https://github.com/owner/repo/pull/123" spellcheck="false" autofocus aria-label="GitHub pull request URL"><button class="on">Open</button></form>
     <div id="land-err" class="muted"></div>
-    <p>Try <a href="#/dotnet/runtime/pull/135064">dotnet/runtime#135064</a>. Public repositories need no sign-in; <b>Sign in</b> for private ones, to comment, and for 5,000 requests per hour instead of 60.</p>
+    <p>Try <a href="#/dotnet/runtime/pull/135064">dotnet/runtime#135064</a>. Public repositories need no sign-in; <b>Sign in</b> with a GitHub token for private ones, to comment, and for 5,000 requests per hour instead of 60.</p>
     <div id="home-root"></div>
     <p class="muted">Keys: <kbd>j</kbd>/<kbd>k</kbd> files, <kbd>n</kbd>/<kbd>p</kbd> changes, <kbd>r</kbd> reviewed, <kbd>s</kbd> side-by-side, <kbd>?</kbd> all.</p></div>`;
   $('#land-form').onsubmit = e => { e.preventDefault(); goto($('#land-in').value, '#land-err'); };
@@ -253,7 +253,7 @@ function commentable(f, side, line) {
 /** The + in the gutter. Signed out it is a dimmed hint that opens the sign-in dialog. */
 function addBtn(f, sd, ln) {
   if (!commentable(f, sd, ln)) return '';
-  return auth.token ? '<button class="addc" data-act="addc" title="Comment on this line (c). Shift-click or drag for several lines." aria-label="Add comment">+</button>' : '<button class="addc hint" data-act="addc" title="Sign in with GitHub to comment" aria-label="Sign in with GitHub to comment">+</button>';
+  return auth.token ? '<button class="addc" data-act="addc" title="Comment on this line (c). Shift-click or drag for several lines." aria-label="Add comment">+</button>' : '<button class="addc hint" data-act="addc" title="Add a GitHub token to comment" aria-label="Add a GitHub token to comment">+</button>';
 }
 /** The comment targets of a row: [{side:'R'|'L', line}] where the add-comment affordance goes. */
 function rowTarget(row) {
@@ -291,7 +291,7 @@ function threadBox(t) {
   const cls = 'thread' + (t.resolved ? ' resolved' : '') + (t.pending ? ' pending' : '') + (t.outdated ? ' old' : '') + (S.flash === id ? ' flash' : '');
   if (!open) return '<div class="' + cls + ' collapsed" data-tid="' + esc(id) + '">' + head + '<div class="tsum">' + esc(t.root.user ? t.root.user.login : 'ghost') + ': ' + esc(excerpt(t.root.body)) + '</div></div>';
   const err = S.terr.get(id);
-  const reply = !t.pending && auth.token ? '<div class="reply"><textarea data-fid="r:' + esc(id) + '" rows="2" placeholder="Reply…">' + esc(S.drafts.get(id) || '') + '</textarea><div class="rbtns">' + (err ? '<span class="err">' + esc(err) + '</span>' : '') + '<button data-act="reply" class="on">Reply</button></div></div>'   : !t.pending && !auth.token ? '<div class="reply"><button data-act="signin" class="hint-reply" title="Sign in with GitHub to comment">Sign in with GitHub to reply</button></div>' : err ? '<div class="err pad">' + esc(err) + '</div>' : '';
+  const reply = !t.pending && auth.token ? '<div class="reply"><textarea data-fid="r:' + esc(id) + '" rows="2" placeholder="Reply…">' + esc(S.drafts.get(id) || '') + '</textarea><div class="rbtns">' + (err ? '<span class="err">' + esc(err) + '</span>' : '') + '<button data-act="reply" class="on">Reply</button></div></div>'   : !t.pending && !auth.token ? '<div class="reply"><button data-act="signin" class="hint-reply" title="Add a GitHub token to comment">Add a GitHub token to reply</button></div>' : err ? '<div class="err pad">' + esc(err) + '</div>' : '';
   return '<div class="' + cls + '" data-tid="' + esc(id) + '">' + head + all.map((c, i) => commentHtml(c, t, i)).join('') + reply + '</div>';
 }
 function composerHtml(c) {

@@ -1,8 +1,8 @@
-// v2: restored v1 fixes, device-flow sign-in (mocked proxy), PR lists, inline comments that post (mocked POSTs). No live calls.
+// v2: restored v1 fixes, token sign-in (mocked /user), PR lists, inline comments that post (mocked POSTs). No live calls.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { start, PR, PROXY, ME } from './harness.mjs';
+import { start, PR, ME } from './harness.mjs';
 
 const SHOTS = new URL('../docs/screenshots/', import.meta.url).pathname;
 fs.mkdirSync(SHOTS, { recursive: true });
@@ -121,72 +121,51 @@ test('side-by-side: a long line wraps inside its pane (no clipping); inline scro
 });
 
 // ------------------------------------------------------------------ 1. sign in
-test('sign in: first-run screen explains the OAuth App, then the device flow runs through the proxy', async () => {
+test('sign in: the dialog explains the fine-grained token, saves it, shows avatar and login, sign out removes it', async () => {
   const h = await start(); const p = h.page;
-  let polls = 0;
-  h.on('POST', /cors-proxy\.ref12cf\.workers\.dev\/github\.com\/login\/device\/code/, () => ({ device_code: 'DEV123', user_code: 'WDJB-MJHT', verification_uri: 'https://github.com/login/device', expires_in: 900, interval: 1 }));
-  h.on('POST', /cors-proxy\.ref12cf\.workers\.dev\/github\.com\/login\/oauth\/access_token/, () => (++polls < 2 ? { error: 'authorization_pending' } : { access_token: 'gho_devicetoken', token_type: 'bearer', scope: 'public_repo' }));
   mockGitHub(h);
   await p.goto(h.base);
   assert.equal(await p.locator('#signin-btn').innerText(), 'Sign in');
   await p.click('#signin-btn');
-  await p.waitForSelector('#si-cid');
+  await p.waitForSelector('#tok');
   const txt = await p.locator('#dlg').innerText();
-  for (const s of [/Settings → Developer settings → OAuth Apps → New OAuth App/, /Enable Device Flow/, /Client ID/, /public_repo/, /Application name/, /callback/i]) assert.match(txt, s);
-  await shot(p, 'signin-first-run');
-  await p.fill('#si-cid', 'x'); await p.click('#si-go');
-  assert.match(await p.locator('#si-msg').innerText(), /Client ID/);
-  await p.fill('#si-cid', 'Ov23liTestClientId01');
-  await p.check('input[name=scope][value=public_repo]');
-  await p.click('#si-go');
-  await p.waitForSelector('#si-code');
-  assert.equal(await p.locator('#si-code').innerText(), 'WDJB-MJHT');
-  assert.match(await p.locator('#dlg').innerText(), /github\.com\/login\/device/);
-  await shot(p, 'signin-device-code');
-  const first = h.calls.find(c => /device\/code/.test(c.url));
-  assert.match(first.body, /client_id=Ov23liTestClientId01/); assert.match(first.body, /scope=public_repo/);
+  for (const s of [/Pull requests: Read and write/, /Contents: Read-only/, /Generate token/, /public_repo/, /localStorage/, /personal-access-tokens\/new/]) assert.match(txt, s);
+  assert.equal(await p.locator('#dlg a[href="https://github.com/settings/personal-access-tokens/new"]').count(), 1);
+  assert.doesNotMatch(txt, /OAuth|proxy|device/i);
+  await shot(p, 'signin-token');
+  await p.click('#tok-save');
+  assert.match(await p.locator('#si-msg').innerText(), /Paste a token/);
+  await p.fill('#tok', 'github_pat_test123'); await p.click('#tok-save');
   await p.waitForSelector('#who-login', { timeout: 15000 });
   assert.equal(await p.locator('#who-login').innerText(), ME.login);
   assert.equal(await p.locator('#who .av').count(), 1);
-  const ls = await p.evaluate(() => ({ t: localStorage.getItem('prview.token'), k: localStorage.getItem('prview.auth') }));
-  assert.deepEqual(ls, { t: 'gho_devicetoken', k: 'oauth' });
-  const tokenCall = h.calls.filter(c => /access_token/.test(c.url));
-  assert.ok(tokenCall.length >= 2); assert.match(tokenCall[0].body, /grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Adevice_code/); assert.match(tokenCall[0].body, /device_code=DEV123/);
-  // sign out
+  assert.equal(await p.evaluate(() => localStorage.getItem('prview.token')), 'github_pat_test123');
+  assert.ok(!h.seen.some(u => /cors-proxy|login\/device|login\/oauth/.test(u)), 'no proxy or OAuth request');
   await p.click('#who-btn'); await p.click('#signout');
   await p.waitForSelector('#signin-btn');
   assert.equal(await p.evaluate(() => localStorage.getItem('prview.token')), null);
   await finish(h);
 });
 
-test('sign in: device flow disabled / proxy refusal are explained', async () => {
-  const h = await start({ settings: { clientId: 'Ov23liTestClientId01', scope: 'repo' } }); const p = h.page;
-  h.on('POST', /device\/code/, () => ({ error: 'device_flow_disabled', error_description: 'x' }));
+test('sign in: a rejected token is refused and not stored', async () => {
+  const h = await start(); const p = h.page;
+  h.on('GET', /api\.github\.com\/user$/, () => ({ status: 401, json: { message: 'Bad credentials' } }));
   await p.goto(h.base);
-  await p.click('#signin-btn');
-  await p.click('#si-go');
-  await p.waitForSelector('#si-cid');
-  assert.match(await p.locator('#dlg').innerText(), /Enable Device Flow/);
+  await p.click('#settings-btn');
+  await p.fill('#tok', 'ghp_bad'); await p.click('#tok-save');
+  await p.waitForFunction(() => /rejected/.test(document.querySelector('#si-msg').textContent));
+  assert.equal(await p.evaluate(() => localStorage.getItem('prview.token')), null);
   await h.close();
-  const h2 = await start({ settings: { clientId: 'Ov23liTestClientId01', scope: 'repo' } });
-  h2.on('POST', /device\/code/, () => ({ status: 403, body: 'target host not allowed' }));
-  await h2.page.goto(h2.base);
-  await h2.page.click('#signin-btn'); await h2.page.click('#si-go');
-  await h2.page.waitForSelector('#si-retry');
-  assert.match(await h2.page.locator('#dlg').innerText(), /ALLOWED_HOSTS/);
-  await h2.close();
 });
 
-test('sign in: a pasted token still works (fallback) and shows the signed-in state', async () => {
+test('settings: add a token from Settings (no OAuth / proxy fields)', async () => {
   const h = await start(); const p = h.page;
   mockGitHub(h);
   await p.goto(h.base);
   await p.click('#settings-btn');
-  await p.locator('#dlg summary', { hasText: 'Paste a token' }).click();
-  await p.fill('#tok', 'ghp_pasted');
-  await p.click('#st-save');
+  assert.doesNotMatch(await p.locator('#dlg').innerText(), /OAuth|proxy|Client ID/i);
+  await p.fill('#tok', 'ghp_pasted'); await p.click('#tok-save');
   await p.waitForSelector('#who-login');
-  assert.equal(await p.evaluate(() => localStorage.getItem('prview.auth')), 'paste');
   assert.equal(await p.locator('#who-login').innerText(), ME.login);
   await finish(h);
 });
@@ -487,7 +466,7 @@ test('batched review: pending comments, then Finish review with Request changes'
   await finish(h);
 });
 
-test('keyboard c opens a comment on the line under the pointer; signed out it asks to sign in', async () => {
+test('keyboard c opens a comment on the line under the pointer; signed out it asks for a token', async () => {
   const h = await start({ signedIn: true }); const p = h.page; mockGitHub(h);
   await open(h);
   await loadLinkTask(p);
@@ -504,9 +483,9 @@ test('keyboard c opens a comment on the line under the pointer; signed out it as
   await p.keyboard.press('c'); await p.waitForSelector('#win .composer');
   await finish(h);
   const o = await start(); await open(o);
-  assert.equal(await o.page.locator('#win .addc').count(), 0, 'signed out: no + affordance');
+  assert.equal(await o.page.locator('#win .addc:not(.hint)').count(), 0, 'signed out: no real + affordance (only the dimmed hint)');
   await o.page.keyboard.press('c');
-  await o.page.waitForSelector('#si-cid');
+  await o.page.waitForSelector('#dlg #tok');
   await o.close();
 });
 
