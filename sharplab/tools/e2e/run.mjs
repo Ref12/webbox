@@ -40,7 +40,7 @@ async function load(ctx, port, hash = '', query = '') {
   const page = await ctx.newPage();
   const wire = track(page);
   const t = Date.now();
-  await page.goto('http://localhost:' + port + PREFIX + query + hash);
+  await page.goto('http://localhost:' + port + PREFIX + (process.env.AOT ? (query ? query + '&aot=1' : '?aot=1') : query) + hash);
   await page.waitForFunction(() => window.__metrics?.marks?.firstView || window.__metrics?.error, null, { timeout: 300000 });
   const m = await page.evaluate(() => window.__metrics);
   assert.equal(m.error, undefined, 'load error: ' + m.error);

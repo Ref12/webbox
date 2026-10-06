@@ -39,7 +39,7 @@ for (const [name, host] of Object.entries(HOSTS).filter(([n]) => !process.env.HO
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource|favicon/.test(m.text())) errors.push(m.text() + ' @ ' + JSON.stringify(m.location()) + ' [step: ' + step + ']'); });
   const t0 = Date.now();
-  await page.goto('http://localhost:' + host.port + host.prefix);
+  await page.goto('http://localhost:' + host.port + host.prefix + (process.env.AOT ? '?aot=1' : ''));
   await page.waitForFunction(() => window.__metrics?.marks?.firstView || window.__metrics?.error, null, { timeout: 300000 });
   const firstViewMs = Date.now() - t0;
   await page.waitForFunction(() => window.__sharplab?.intelliReady() || window.__metrics?.intellisenseError, null, { timeout: 120000 }).catch(async (e) => {
