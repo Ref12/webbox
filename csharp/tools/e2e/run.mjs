@@ -130,7 +130,7 @@ assert.equal(await getInput(), 'line one\nline two', 'plain Up did not touch the
 await page.evaluate(() => window.monaco.editor.getEditors()[0].setValue(''));
 
 // ---------- copy icon ----------
-const copy = page.locator('.entry').nth(await page.locator('.entry').count() - 2).locator('.copy');
+const copy = page.locator('.entry').nth(await page.locator('.entry').count() - 2).locator('.code .copy');
 await copy.click();
 assert.equal(await page.evaluate(() => navigator.clipboard.readText()), 'Console.WriteLine("hello classified");');
 assert.ok(await copy.evaluate((b) => b.classList.contains('done')), 'copy confirmation');

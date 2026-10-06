@@ -6,7 +6,7 @@ async function load() {
   const mod = await import('./vendor/brotli_dec_wasm.js');
   const r = await fetch(new URL('./vendor/brotli_dec_wasm_bg.wasm', import.meta.url));
   if (!r.ok) throw new Error('brotli decoder: HTTP ' + r.status);
-  await mod.default(new Uint8Array(await r.arrayBuffer()));
+  await mod.default({ module_or_path: new Uint8Array(await r.arrayBuffer()) });
   return mod;
 }
 export async function brotliDecode(bytes) {
