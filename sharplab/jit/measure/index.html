@@ -1,0 +1,14 @@
+<html><head><link rel="stylesheet" href="./xterm.css"/></head><body><div id="terminal"></div>
+<script src="./load.js"></script><script src="./xterm.js"></script><script src="./xterm-pty.js"></script>
+<script type="module">
+import './arg-module.js'; import initEmscriptenModule from './out.js';
+const xterm=new Terminal({cols:200,rows:50}); xterm.open(document.getElementById('terminal'));
+const {master,slave}=openpty(); xterm.loadAddon(master); window.xterm=xterm; Module.pty=slave;
+Module['mainScriptUrlOrBlob']=location.origin+'/out.js';
+let info='t:'+Math.round(Date.now()/1000)+'\n';
+Module['preRun'].push(m=>{try{FS.mkdir('/pack')}catch(e){} m.FS.writeFile('/pack/info',info);});
+let cbs=[]; slave.onReadable(()=>{cbs.forEach(c=>c());cbs=[];});
+Module['preRun'].push(M=>{M['TTY'].stream_ops.poll=(st,t,n)=>{if(slave.readable)return 1;if(n!=null){n.registerCleanupFunc(()=>{const i=cbs.indexOf(n);if(i!=-1)cbs.splice(i,1)});cbs.push(n);}return 0;};});
+window.t0=performance.now(); window.startVM=()=>initEmscriptenModule(Module);
+window.screenText=()=>{const b=xterm.buffer.active;let o=[];for(let i=0;i<b.length;i++)o.push(b.getLine(i).translateToString(true));return o.join('\n')};
+</script></body></html>

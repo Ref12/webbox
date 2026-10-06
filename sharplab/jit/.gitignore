@@ -1,0 +1,7 @@
+app/out
+build/
+*.wasm
+*.data
+app/obj
+app2/obj
+app2/out
