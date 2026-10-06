@@ -147,7 +147,9 @@ const shareCode = 'using System;\nclass Shared { static void Main() { Console.Wr
 await page.evaluate((c) => window.__sharplab.setCode(c), shareCode);
 await page.selectOption('#lang', '12'); await tab('cs'); await page.selectOption('#level', '3'); await tab('il');
 await page.waitForTimeout(800);
+await page.evaluate(() => { window.__lastShare = undefined; });
 await page.click('#share');
+await page.waitForFunction(() => window.__lastShare);
 const url = await page.evaluate(() => window.__lastShare);
 assert.ok(url.includes('#v1:'), url);
 metrics.shareLinkLength = url.length;
