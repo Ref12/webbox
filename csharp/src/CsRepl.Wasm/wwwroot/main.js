@@ -125,6 +125,7 @@ async function main() {
     else if (m.event === 'metrics') Object.assign(metrics, m.patch);
     else if (m.event === 'crashed') { console.error(who + ' worker crashed', m.message); if (who === 'exec') setStatus('runtime crashed: ' + m.message); }
   };
+  const useThreadsRef = { v: false };
   const exec = new RuntimeClient(spawn('exec'), { onEvent: onEvent('exec'), name: 'exec' });
   const intelliW = new RuntimeClient(spawn('intelli'), { onEvent: onEvent('intelli'), name: 'intelli' });
   window.__workers = { exec, intelli: intelliW };
@@ -192,7 +193,7 @@ async function main() {
     exec.restart('restart');
     metrics.restarts = (metrics.restarts || 0) + 1;
     setStatus('restarting the runtime…');
-    await exec.request('init', { threads: THREADS });
+    await exec.request('init', { threads: useThreadsRef.v });
     let replayed = 0;
     for (const code of log.codes) {
       setStatus('restoring the session (' + ++replayed + '/' + log.length + ')…');
@@ -275,7 +276,18 @@ async function main() {
   // ---- the runtimes: the page only draws; compile/run live in the exec worker, Roslyn IntelliSense in the intelli worker ----
   setStatus('downloading .NET runtime…');
   exec.start();
-  const info = await exec.request('init', { threads: THREADS });
+  let useThreads = THREADS, info;
+  if (THREADS) {
+    // Experimental: .NET 10's threaded runtime does not start inside a Web Worker (see README); fall back to the normal runtime instead of hanging.
+    info = await Promise.race([exec.request('init', { threads: true }).catch((e) => ({ failed: String(e.message) })), new Promise((r) => setTimeout(() => r({ failed: 'timeout' }), 40000))]);
+    if (info.failed) {
+      console.warn('threads=1: the threaded runtime did not start in the worker (' + info.failed + '); using the normal runtime');
+      metrics.threadsFailed = info.failed; useThreads = false;
+      exec.restart('threads fallback');
+    }
+  }
+  if (!info || info.failed) info = await exec.request('init', { threads: false });
+  useThreadsRef.v = useThreads;
   assemblyNames = info.assemblies;
   Object.assign(metrics, { threads: info.threads, cores: info.cores, crossOriginIsolated: info.crossOriginIsolated });
   metrics.ready = true;
