@@ -11,18 +11,20 @@ const CORS = { 'access-control-allow-origin': '*', 'access-control-expose-header
 
 /**
  * Start server + browser. GitHub is answered from the recorded fixture; anything unrecorded and unmocked is a failure.
+ * view: the stored 'view' setting ('all' by default here, because most tests exercise stacked; null = nothing stored = the app default, one file).
  * signedIn: true puts a (fake) token and user in localStorage. h.on(method, regex, fn) adds a mock: fn({url, method, body, json}) returns
  * a JSON value, or {status, json|body, headers}. h.calls lists every non-GET and every mocked request.
  */
-export async function start({ viewport = { width: 1600, height: 1000 }, fixture = FIXTURE, mobile = false, signedIn = false, settings = null } = {}) {
+export async function start({ viewport = { width: 1600, height: 1000 }, fixture = FIXTURE, mobile = false, signedIn = false, settings = null, view = 'all' } = {}) {
   const { srv, port } = await serve();
   const br = await chromium.launch({ executablePath: '/usr/bin/chromium', args: ['--no-sandbox'] });
   const ctx = await br.newContext({ viewport, isMobile: mobile, hasTouch: mobile, serviceWorkers: 'block', permissions: ['clipboard-read', 'clipboard-write'] });
-  if (signedIn || settings) await ctx.addInitScript(({ signedIn, settings, ME }) => {
+  if (signedIn || settings || view) await ctx.addInitScript(({ signedIn, settings, view, ME }) => {
     if (sessionStorage.getItem('__seeded')) return; sessionStorage.setItem('__seeded', '1');
     if (signedIn) { localStorage.setItem('prview.token', 'gho_faketoken'); localStorage.setItem('prview.auth', 'oauth'); localStorage.setItem('prview.user', JSON.stringify({ login: ME.login, name: ME.name, avatar: ME.avatar_url })); }
     if (settings) localStorage.setItem('prview.settings', JSON.stringify(settings));
-  }, { signedIn, settings, ME });
+    if (view) localStorage.setItem('prview.view', JSON.stringify(view));   // legacy tests exercise the stacked view; pass view: null for the real default (one file)
+  }, { signedIn, settings, view, ME });
   setTimeout(() => { br.close().catch(() => {}); srv.close(); }, 150000).unref();   // safety net: a failed test must not leave Chromium keeping the runner alive
   const rec = JSON.parse(fs.readFileSync(fixture, 'utf8'));
   const misses = [], seen = [], calls = [], mocks = [];

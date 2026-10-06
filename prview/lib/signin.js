@@ -85,10 +85,11 @@ export function signInDialog(ctx) {
 }
 
 /** Settings: the OAuth App, the proxy, the signed-in state and the token fallback. */
-export function settingsDialog({ openDialog, session, finish, signOut, signIn }) {
+export function settingsDialog({ view, setView, openDialog, session, finish, signOut, signIn }) {
   const s = loadSettings();
   const d = openDialog(`<h2>Settings</h2>
     <p><b>Account</b><br>${session.token ? `Signed in${session.user ? ' as <b>' + esc(session.user.login) + '</b>' : ''} (${session.kind === 'oauth' ? 'GitHub sign-in' : 'pasted token'}). <button id="st-out">Sign out</button>` : 'Not signed in. Public repositories work, with GitHub\'s 60 requests per hour. <button id="st-in" class="on">Sign in with GitHub</button>'}</p>
+    <p><label><input type="checkbox" id="st-stack" ${view === 'all' ? 'checked' : ''}> <b>All files stacked</b> in the diff (default: one file at a time)</label></p>
     <details ${session.token ? '' : 'open'}><summary>OAuth App for sign-in</summary>
       <label>Client ID<br><input id="st-cid" type="text" autocomplete="off" spellcheck="false" placeholder="not set yet" value="${esc(s.clientId)}"></label>
       <p>${scopeRadios(s.scope)}</p>
@@ -102,6 +103,7 @@ export function settingsDialog({ openDialog, session, finish, signOut, signIn })
   const inn = d.querySelector('#st-in'); if (inn) inn.onclick = () => { d.close(); signIn(); };
   d.querySelector('#st-save').onclick = async () => {
     const cid = d.querySelector('#st-cid').value.trim();
+    if (setView) setView(d.querySelector('#st-stack').checked ? 'all' : 'one');
     saveSettings({ clientId: cid, scope: pickScope(d), proxy: d.querySelector('#st-proxy').value.trim() });
     const tok = d.querySelector('#tok').value.trim();
     if (tok && tok !== session.token) {

@@ -176,3 +176,12 @@ dialog { max-height: 90vh; overflow: auto; }
 #cpanel .pt { display: flex; gap: 8px; padding: 6px 12px; cursor: pointer; border-top: 1px solid var(--line); } #cpanel .pt:hover { background: var(--hover); } #cpanel .pm { min-width: 0; flex: 1; } #cpanel .who { font-size: 12px; } #cpanel .ex { display: block; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 800px) { #cpanel { position: fixed; z-index: 28; right: 0; top: 0; bottom: 0; width: min(92vw, 360px); box-shadow: -4px 0 24px rgba(0,0,0,.3); } .thread { margin-left: 8px; } .olist { margin-left: 8px; } }
 @media (max-width: 800px) { #who-login { display: none; } #top { gap: 6px; padding: 6px 8px; } #rate { font-size: 11px; } }
+
+/* ---- v3: tree icon, signed-out hint, file navigation */
+.tree-icon { display: block; } #menu { align-items: center; justify-content: center; padding: 4px 6px; } @media (max-width: 800px) { #menu.only-phone { display: inline-flex; } }
+.addc.hint { background: transparent; color: var(--muted); border: 1px dashed var(--muted); line-height: 14px; opacity: .3; }
+.row:hover .addc.hint, .half:hover .addc.hint, .addc.hint:focus-visible { opacity: .9; } .addc.hint:hover { background: transparent; filter: none; color: var(--accent); border-color: var(--accent); }
+@media (hover: none) { .addc.hint { opacity: .4; } }
+.hint-reply { background: transparent; color: var(--muted); border: 1px dashed var(--line); font-size: 12px; }
+.fpos { padding: 0 6px; font-size: 12px; color: var(--muted); align-self: center; font-variant-numeric: tabular-nums; }
+#file-nav[hidden] { display: none; }

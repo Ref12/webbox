@@ -23,6 +23,7 @@ const PHONE = () => matchMedia('(max-width: 800px)').matches;
 let S = null;                 // the open pull request (null on the landing page)
 let hl = null;                // lazily imported highlighter
 let charW = 7.6;
+const defaultView = () => store.get('view', 'one') === 'all' ? 'all' : 'one';
 const ui = { mode: store.get('mode', 'inline'), full: false };
 
 // ---------------------------------------------------------------- banner, rate, dialogs
@@ -53,7 +54,7 @@ async function finishSignIn(token, kind) {
 }
 function signIn() { closePopovers(); signInDialog({ openDialog, finish: finishSignIn, pasteToken: settingsDialog }); }
 function signOut() { clearSession(); auth = getSession(); location.reload(); }
-function settingsDialog() { settingsUi({ openDialog, session: auth, finish: finishSignIn, signOut, signIn }); }
+function settingsDialog() { settingsUi({ view: defaultView(), setView, openDialog, session: auth, finish: finishSignIn, signOut, signIn }); }
 function renderWho() {
   const el = $('#who');
   if (!auth.token) { el.innerHTML = '<button id="signin-btn" class="on" title="Sign in with GitHub">Sign in</button>'; $('#signin-btn').onclick = signIn; return; }
@@ -92,7 +93,7 @@ function helpDialog() {
 window.addEventListener('hashchange', () => { if (S && S.hashSet === location.hash) return; route(); });
 function syncHash() {
   if (!S) return;
-  const p = { f: S.view === 'one' ? S.selected : S.selected && S.selected !== S.order[0]?.filename ? S.selected : '', c: S.cparam || '', m: ui.mode === 'split' ? 'split' : '', v: S.view === 'one' ? 'one' : '', x: ui.full ? '1' : '' };
+  const p = { f: S.view === 'one' ? S.selected : S.selected && S.selected !== S.order[0]?.filename ? S.selected : '', c: S.cparam || '', m: ui.mode === 'split' ? 'split' : '', v: S.view !== defaultView() ? S.view : '', x: ui.full ? '1' : '' };
   const h = toRoute(S.ref, p, S.tab);
   if (h !== location.hash) { S.hashSet = h; history.replaceState(null, '', h); }
 }
@@ -141,7 +142,7 @@ async function openPr(ref, tab, params) {
   $('#main').innerHTML = '<div class="empty">Loading ' + esc(ref.owner + '/' + ref.repo + '#' + ref.number) + '…</div>';
   const gh = new GitHub({ token: getToken(), onRate: showRate });
   const s = S = {
-    ref, key: ref.owner + '/' + ref.repo + '#' + ref.number, gh, tab, view: params.v === 'one' ? 'one' : 'all', filter: '', collapsedDirs: new Set(),
+    ref, key: ref.owner + '/' + ref.repo + '#' + ref.number, gh, tab, view: params.v === 'all' || params.v === 'one' ? params.v : defaultView(), filter: '', collapsedDirs: new Set(),
     items: [], tops: new Float64Array(0), cmH: new Map(), gen: 0, loadQueue: [], active: 0, winFiles: new Set(), selected: params.f || null, current: null, treeRows: [], comments: null, threads: [], gql: null, pending: [], composer: null, drafts: new Map(), tOpen: new Map(), terr: new Map(), outOpen: new Set(), panel: false, pfilter: 'all', vw: 0, threadItem: new Map(),
   };
   if (params.m) ui.mode = params.m === 'split' ? 'split' : 'inline';
@@ -243,10 +244,16 @@ function buildCommentIndex() {
 }
 function savePending() { store.set('pend:' + S.key + '@' + S.headSha, S.pending); }
 function findThread(id) { return (S.cAll || []).find(t => String(t.id) === String(id)); }
-function canComment(f, side, line) {
-  if (!auth.token || !S.commentsShown || !f || f.st.status !== 'ready') return false;
+function canComment(f, side, line) { return !!auth.token && commentable(f, side, line); }
+function commentable(f, side, line) {
+  if (!S.commentsShown || !f || f.st.status !== 'ready') return false;
   if (f.hunks === undefined) f.hunks = parsePatch(f.patch);
   return lineInDiff(f.hunks, side === 'L' ? 'LEFT' : 'RIGHT', line);
+}
+/** The + in the gutter. Signed out it is a dimmed hint that opens the sign-in dialog. */
+function addBtn(f, sd, ln) {
+  if (!commentable(f, sd, ln)) return '';
+  return auth.token ? '<button class="addc" data-act="addc" title="Comment on this line (c). Shift-click or drag for several lines." aria-label="Add comment">+</button>' : '<button class="addc hint" data-act="addc" title="Sign in with GitHub to comment" aria-label="Sign in with GitHub to comment">+</button>';
 }
 /** The comment targets of a row: [{side:'R'|'L', line}] where the add-comment affordance goes. */
 function rowTarget(row) {
@@ -284,7 +291,7 @@ function threadBox(t) {
   const cls = 'thread' + (t.resolved ? ' resolved' : '') + (t.pending ? ' pending' : '') + (t.outdated ? ' old' : '') + (S.flash === id ? ' flash' : '');
   if (!open) return '<div class="' + cls + ' collapsed" data-tid="' + esc(id) + '">' + head + '<div class="tsum">' + esc(t.root.user ? t.root.user.login : 'ghost') + ': ' + esc(excerpt(t.root.body)) + '</div></div>';
   const err = S.terr.get(id);
-  const reply = !t.pending && auth.token ? '<div class="reply"><textarea data-fid="r:' + esc(id) + '" rows="2" placeholder="Reply…">' + esc(S.drafts.get(id) || '') + '</textarea><div class="rbtns">' + (err ? '<span class="err">' + esc(err) + '</span>' : '') + '<button data-act="reply" class="on">Reply</button></div></div>' : err ? '<div class="err pad">' + esc(err) + '</div>' : '';
+  const reply = !t.pending && auth.token ? '<div class="reply"><textarea data-fid="r:' + esc(id) + '" rows="2" placeholder="Reply…">' + esc(S.drafts.get(id) || '') + '</textarea><div class="rbtns">' + (err ? '<span class="err">' + esc(err) + '</span>' : '') + '<button data-act="reply" class="on">Reply</button></div></div>'   : !t.pending && !auth.token ? '<div class="reply"><button data-act="signin" class="hint-reply" title="Sign in with GitHub to comment">Sign in with GitHub to reply</button></div>' : err ? '<div class="err pad">' + esc(err) + '</div>' : '';
   return '<div class="' + cls + '" data-tid="' + esc(id) + '">' + head + all.map((c, i) => commentHtml(c, t, i)).join('') + reply + '</div>';
 }
 function composerHtml(c) {
@@ -366,6 +373,7 @@ function commentAction(act, el, f, e) {
       S.lastCl = { path: f.filename, side, line };
       return true;
     }
+    case 'signin': signIn(); return true;
     case 'tcol': if (t) { S.tOpen.set(String(t.id), !threadOpen(t)); relayout(true); } return true;
     case 'outl': S.outOpen.has(f.filename) ? S.outOpen.delete(f.filename) : S.outOpen.add(f.filename); relayout(true); return true;
     case 'resolve': if (t) toggleResolve(t); return true;
@@ -547,7 +555,8 @@ function renderPage() {
       <span class="sp"></span>
       <span class="seg" role="group" aria-label="Diff layout"><button id="m-inline" title="Inline (s)">Inline</button><button id="m-split" title="Side-by-side (s)">Side-by-side</button></span>
       <button id="full-btn" class="hide-phone" title="Show changes only or the full file (f)"></button>
-      <button id="view-btn" class="hide-phone" title="All files stacked or one file at a time (a)"></button>
+      <button id="view-btn" class="hide-phone" title="One file at a time or all files stacked (a)"></button>
+      <span class="seg" id="file-nav"><button id="prev-file" title="Previous file (k)" aria-label="Previous file">‹</button><span id="file-pos" class="fpos"></span><button id="next-file" title="Next file (j)" aria-label="Next file">›</button></span>
       <button id="coll-btn" class="hide-phone" title="Collapse or expand every file"></button>
       <span class="seg hide-phone"><button id="prev-chg" title="Previous change (p)">↑</button><button id="next-chg" title="Next change (n)">↓</button></span>
       <button id="cm-btn" title="All comment threads">💬 <span id="cm-n"></span></button>
@@ -570,6 +579,9 @@ function wireFiles() {
   $('#m-split').onclick = () => setMode('split');
   $('#full-btn').onclick = () => { ui.full = !ui.full; if (ui.full) S.fl.forEach(f => (f.st.expand = {})); relayout(true); updateToolbar(); syncHash(); };
   $('#view-btn').onclick = toggleView;
+  $('#prev-file').onclick = () => stepFile(-1);
+  $('#next-file').onclick = () => stepFile(1);
+  wireSwipe($('#diff'));
   $('#coll-btn').onclick = () => { const all = S.fl.every(f => f.st.collapsed); S.fl.forEach(f => (f.st.collapsed = !all)); relayout(true); updateToolbar(); };
   $('#next-chg').onclick = () => stepChange(1);
   $('#prev-chg').onclick = () => stepChange(-1);
@@ -601,6 +613,7 @@ function updateToolbar() {
   $('#full-btn').textContent = ui.full ? 'Full files' : 'Changes only';
   $('#full-btn').classList.toggle('on', ui.full);
   $('#view-btn').textContent = s.view === 'all' ? 'All files' : 'One file';
+  { const list = viewFilesAll(), i = list.findIndex(f => s.current && f.filename === s.current.filename); $('#file-pos').textContent = list.length ? (i + 1) + ' / ' + list.length : ''; $('#prev-file').disabled = i <= 0; $('#next-file').disabled = i < 0 || i >= list.length - 1; $('#file-nav').hidden = s.view === 'all' ? false : false; }
   const files = s.fl || [];
   const done = files.filter(f => s.reviewed.has(f.filename)).length;
   $('#count').textContent = files.length + ' changed file' + (files.length === 1 ? '' : 's') + ' · ' + done + ' reviewed' + (s.commentsShown ? '' : s.comments && s.comments.length ? ' · comments are shown in All changes' : '');
@@ -624,6 +637,16 @@ function measureChar() {
 }
 
 function setMode(m) { ui.mode = m; store.set('mode', m); relayout(true); updateToolbar(); syncHash(); }
+function setView(v) { store.set('view', v); if (S && S.view !== v) toggleView(); }
+function wireSwipe(el) {
+  let x0 = 0, y0 = 0, t0 = 0, ok = false;
+  el.addEventListener('touchstart', e => { ok = S && S.view === 'one' && e.touches.length === 1 && !e.target.closest('textarea,input,pre,.tx'); x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now(); }, { passive: true });
+  el.addEventListener('touchend', e => {
+    if (!ok) return; ok = false;
+    const t = e.changedTouches[0], dx = t.clientX - x0, dy = t.clientY - y0;
+    if (Date.now() - t0 < 700 && Math.abs(dx) > 70 && Math.abs(dx) > 2 * Math.abs(dy)) stepFile(dx < 0 ? 1 : -1);
+  }, { passive: true });
+}
 function toggleView() {
   S.view = S.view === 'all' ? 'one' : 'all';
   relayout(false);
@@ -864,7 +887,7 @@ function itemHtml(it, i) {
           const sd = side === 'a' ? 'L' : 'R', ln = idx + 1;
           const target = sd === 'R' || (changed && !same);   // unchanged lines take comments on the new side only
           const attrs = target ? ` data-cl="${sd}:${ln}"` : '';
-          const add = target && canComment(f, sd, ln) ? '<button class="addc" data-act="addc" title="Comment on this line (c). Shift-click or drag for several lines." aria-label="Add comment">+</button>' : '';
+          const add = target ? addBtn(f, sd, ln) : '';
           return `<div class="half ${cls}${target && inSel(f, sd, ln) ? ' sel' : ''}"${attrs}>${add}<span class="ln">${ln}</span><span class="sg">${cls === 'add' ? '+' : cls === 'del' ? '−' : ''}</span><span class="tx">${textHtml(f, side, idx, wr && wr[side], 'wd')}</span></div>`;
         };
         return wrap('r', `<div class="row split${last}">${half('a', r.a, changed && !same ? 'del' : '')}${half('b', r.b, changed && !same ? 'add' : '')}</div>`);
@@ -872,7 +895,7 @@ function itemHtml(it, i) {
       const wr = r.w ? wordRanges(f, r.w) : null;
       const side = r.k === 'del' ? 'a' : 'b', idx = r.k === 'del' ? r.a : r.b;
       const sd = r.k === 'del' ? 'L' : 'R', ln = (r.k === 'del' ? r.a : r.b) + 1;
-      const add = canComment(f, sd, ln) ? '<button class="addc" data-act="addc" title="Comment on this line (c). Shift-click or drag for several lines." aria-label="Add comment">+</button>' : '';
+      const add = addBtn(f, sd, ln);
       return wrap('r', `<div class="row ${r.k === 'eq' ? '' : r.k}${last}${inSel(f, sd, ln) ? ' sel' : ''}" data-cl="${sd}:${ln}">${add}<span class="ln">${r.a != null ? r.a + 1 : ''}</span><span class="ln">${r.b != null ? r.b + 1 : ''}</span><span class="sg">${r.k === 'add' ? '+' : r.k === 'del' ? '−' : ''}</span><span class="tx">${textHtml(f, side, idx, wr && wr[side], 'wd')}</span></div>`);
     }
   }
@@ -1005,7 +1028,7 @@ function selectFile(path) {
   S.selected = path;
   S.current = S.fl.find(f => f.filename === path) || S.current;
   scrollToFile(path);
-  renderTree(); syncHash();
+  renderTree(); updateToolbar(); syncHash();
 }
 function stepFile(d) {
   const list = viewFilesAll();
