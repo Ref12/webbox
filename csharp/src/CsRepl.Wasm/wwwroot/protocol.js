@@ -1,4 +1,4 @@
-// Message protocol between the page and a runtime worker (see runtime-worker.js). Plain JS, no DOM: unit-tested in tests/js/protocol.test.mjs.
+// Message protocol between the page and a runtime worker (see the worker script). Plain JS, no DOM: unit-tested in tests/js/protocol.test.mjs.
 //   page -> worker   { id, op, args }
 //   worker -> page   { id, ok: true, result } | { id, ok: false, error }        the answer to a request
 //                    { event: 'out', id, text }                                  streamed Console output of request <id>

@@ -10,8 +10,12 @@ const site = path.resolve(process.argv[2] ?? '../../_site');
 const shotDir = path.resolve(process.argv[3] ?? '../../docs');
 const metricsOut = process.argv[4] ?? '../../docs/metrics.json';
 const port = 8123;
-const server = spawn(process.execPath, [path.resolve('..', 'pages-sim.mjs'), site, String(port), '/webbox', '--gzip=' + (process.env.GZIP || 'text')], { stdio: 'inherit' });
-const BASE = 'http://localhost:' + port + '/webbox/csharp/';
+// TARGET=pages (default): the Pages-like server under /webbox/;  TARGET=cloudflare: the staged _cf_site served with its own _headers (cf-sim.mjs) from /
+const target = process.env.TARGET || 'pages';
+const server = target === 'cloudflare'
+  ? spawn(process.execPath, [path.resolve('..', 'cf-sim.mjs'), site, String(port)], { stdio: 'inherit' })
+  : spawn(process.execPath, [path.resolve('..', 'pages-sim.mjs'), site, String(port), '/webbox', '--gzip=' + (process.env.GZIP || 'text')], { stdio: 'inherit' });
+const BASE = 'http://localhost:' + port + (target === 'cloudflare' ? '/csharp/' : '/webbox/csharp/');
 await new Promise((r) => setTimeout(r, 800));
 const exe = process.env.CHROME_PATH || ['/usr/bin/chromium', '/usr/bin/google-chrome'].find((p) => fs.existsSync(p));
 const browser = await chromium.launch({ executablePath: exe, args: ['--no-sandbox'] });
@@ -40,7 +44,8 @@ const wireAtFirstResult = { ...wire };
 let m = await page.evaluate(() => window.__metrics);
 assert.equal(m.error, undefined, 'load error: ' + m.error);
 assert.ok(m.net.retries >= 1 && failed >= 2, 'retry path exercised: ' + JSON.stringify(m.net));
-console.log('usable (first result) after', m.marks.firstResult, 'ms; IntelliSense not yet ready:', await page.evaluate(() => document.getElementById('intelli').textContent));
+if (target === 'cloudflare') { assert.equal(m.crossOriginIsolated, true, 'COOP/COEP => crossOriginIsolated'); assert.ok(!notFound.length); }
+console.log('usable (first result) after', m.marks['exec.firstResult'], 'ms; IntelliSense not yet ready:', await page.evaluate(() => document.getElementById('intelli').textContent));
 // the REPL works before IntelliSense is ready
 await page.evaluate(() => window.__submit('1 + 2'));
 assert.ok((await page.locator('.entry').last().innerText()).includes('3'), 'REPL usable before IntelliSense');
@@ -230,6 +235,45 @@ await page.evaluate(() => window.__submit('kept'));
 assert.ok((await page.locator('.entry').last().locator('.err').first().innerText()).includes('kept'), '#reset forgot the variables');
 await page.evaluate(() => window.__submit('#nope'));
 assert.ok((await page.locator('.entry').last().locator('.err').count()) >= 1, 'unknown # line is a C# error, not a command');
+
+// ---------- Stop, responsiveness, recovery ----------
+await page.evaluate(() => window.__submit('#reset'));
+await page.evaluate(() => window.__submit('var survivor = 41;'));
+await page.evaluate(() => window.__submit('int Twice(int x) => x * 2;'));
+await page.evaluate(() => { window.__long = window.__submit('Console.WriteLine("started"); long n = 0; while (true) { n++; }'); });
+await page.waitForSelector('#stop:not([hidden])', { timeout: 20000 });
+await page.waitForFunction(() => document.querySelector('.entry:last-child .out')?.textContent.includes('started'), null, { timeout: 20000 });   // output streamed while still running
+// the page stays responsive: typing + IntelliSense work while the loop spins
+const tk = Date.now();
+await page.click('#editor .monaco-editor .view-lines');
+await page.evaluate(() => window.monaco.editor.getEditors()[0].setValue(''));
+await page.keyboard.type('Console.Wri', { delay: 30 });
+await page.waitForSelector('.suggest-widget.visible', { timeout: 20000 });
+const responsiveMs = Date.now() - tk;
+const typed = await getInput();
+assert.equal(typed, 'Console.Wri', 'typing works while code runs');
+const frames = await page.evaluate(() => new Promise((r) => { let n = 0; const t = performance.now(); const f = () => { n++; if (performance.now() - t > 500) r(n); else requestAnimationFrame(f); }; f(); }));
+const live = await page.evaluate(() => window.__intelli('Complete', 'Console.Wri', 11, '').then((r) => r?.items?.length ?? r?.length ?? 0));
+console.log('while a loop runs: typing+completion in', responsiveMs, 'ms,', frames, 'frames in 500 ms, completion items', live);
+assert.ok(frames > 5, 'main thread keeps rendering during a long loop (' + frames + ' frames)');
+assert.ok(live > 0, 'IntelliSense answers while code runs');
+await page.evaluate(() => window.monaco.editor.getEditors()[0].setValue(''));
+const ts = Date.now();
+await page.click('#stop');
+await page.waitForFunction(() => document.querySelector('#stop').hidden && document.querySelector('#run').disabled === false, null, { timeout: 120000 });
+console.log('Stop -> usable again after', Date.now() - ts, 'ms');
+assert.ok((await page.locator('#transcript').innerText()).includes('Stopped'), 'the entry says it was stopped');
+assert.ok((await page.locator('#transcript').innerText()).includes('session restored'), 'restore note with reset offer');
+await page.evaluate(() => window.__submit('survivor + Twice(1)'));
+assert.equal((await page.locator('.entry').last().locator('.val').innerText()).trim(), '43', 'session recovered: variables and methods replayed');
+// Ctrl+C stops too
+await page.evaluate(() => { window.__long = window.__submit('while (true) { }'); });
+await page.waitForSelector('#stop:not([hidden])', { timeout: 20000 });
+await page.evaluate(() => document.activeElement?.blur());
+await page.keyboard.press('Control+c');
+await page.waitForFunction(() => document.querySelector('#stop').hidden && document.querySelector('#run').disabled === false, null, { timeout: 120000 });
+await page.evaluate(() => window.__submit('survivor'));
+assert.equal((await page.locator('.entry').last().locator('.val').innerText()).trim(), '41', 'recovered again after Ctrl+C');
 
 // ---------- screenshots ----------
 await page.evaluate(() => window.monaco.editor.getEditors()[0].setValue('var squares = Enumerable.Range(1, 5).Select(i => i * i);\n'));

@@ -1,7 +1,7 @@
-// A .NET WebAssembly runtime in a dedicated worker. Two of them run side by side (see main.js):
+// A .NET WebAssembly runtime in a dedicated worker. Two of them run side by side (see the page script):
 //   role 'exec'     compiles and runs submissions (it is busy while user code runs; Stop terminates it)
 //   role 'intelli'  Roslyn IntelliSense: completion, hover, signature help, diagnostics, colours (stays responsive while code runs)
-// The page talks to them with the small protocol of protocol.js.
+// The page talks to them with the small message protocol (the protocol module).
 import { serve, batcher } from './protocol.js';
 import { createAssets } from './assets.js';
 import { MANIFESTS, DOTNET } from './config.js';
@@ -50,6 +50,7 @@ const handlers = {
       assets.markReady();
       emit('metrics', { patch: { firstResultMs: Math.round(performance.now() - tw), wireBytesAtFirstResult: wire(), threads } });
       if (!warm.success) console.error('warm-up failed', warm);
+      emit('metrics', { patch: { net: { ...assets.net } } });
       emit('mark', { name: 'firstResult' });
       return { assemblies: man.assemblies.map((a) => a.name.replace(/\.dll$/i, '')), threads, cores: navigator.hardwareConcurrency, crossOriginIsolated: self.crossOriginIsolated };
     }
