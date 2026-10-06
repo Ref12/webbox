@@ -118,3 +118,13 @@ by shipping reference assemblies as static files, and SharpLab uses a server. Tr
 * A submission that throws is discarded entirely (csi keeps variables assigned before the throw). `#load` takes URLs only; no cancellation of an infinite loop (single thread; would need a worker).
 * Compile + run + IntelliSense block the UI thread; moving the runtime to a Web Worker would fix both. The 10 MB framework payload is mostly Roslyn; trimming and AOT are untried.
 * Only Linux/Chromium was run here. Monaco comes from a CDN (the page falls back to a plain textarea without IntelliSense).
+
+
+## Delivery: Cloudflare Worker + GitHub Pages, runtime in Web Workers
+
+- **One build, two staged copies** (`tools/stage.mjs --target=pages|cloudflare`). Paths are relative, so the same files work at `/webbox/csharp/` (Pages) and `/csharp/` (Cloudflare).
+  - **cloudflare**: no `.br`/`.gz`, no in-browser decoder; `_headers` (generated into the assets root) sets COOP `same-origin` + COEP `credentialless` on `/csharp/*`, immutable caching for fingerprinted files, no cache for `index.html`/`build.json`, and `Content-Type: application/wasm` for `.wasm`, `ref/*.bin`, `ref/a/*`, `lazy/*.dll` (Cloudflare compresses wasm/js/json at the edge but not application/octet-stream).
+  - **pages**: as before (big binaries as `.br`, decoded in the worker, `config.js` BROTLI=true).
+- `wrangler.jsonc` (repo root): Worker `webbox`, assets from `_cf_site`. `.github/workflows/pages.yml` runs `wrangler deploy` after the Pages deploy (skipped when the `CLOUDFLARE_API_TOKEN` secret is missing). Rehearse locally: `tools/stage-cloudflare.sh && wrangler deploy --dry-run`, then `TARGET=cloudflare node tools/e2e/run.mjs ../../../_cf_site ...` (`tools/cf-sim.mjs` serves `_cf_site` with its own `_headers` and edge-style compression).
+- **Workers**: `runtime-worker.js` runs a .NET runtime per role: `exec` (compile + run, streamed Console output) and `intelli` (Roslyn IntelliSense, follows the session through `Track`). Protocol: `protocol.js` (ids, `out` events, termination = cancel). **Stop** / Ctrl+C terminate the exec worker, start a new one and replay the successful submissions (offer to reset).
+- **Threads (`?threads=1`)**: a `WasmEnableThreads` build is staged under `mt/`. It boots on the main thread with COOP/COEP, but **fails inside a Web Worker** in .NET 10 (`mono_wasm_pthread_on_pthread_attached`: `dispatchEvent` of undefined) and a threaded runtime on the main thread cannot call synchronous exports. The page therefore falls back (after 15 s) to the normal runtime and records `metrics.threadsFailed`. Not recommended to ship yet.

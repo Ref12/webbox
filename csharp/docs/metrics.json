@@ -1,84 +1,86 @@
 {
  "cold": {
   "marks": {
-   "editorReady": 366,
-   "runtimeCreated": 1275,
-   "exportsReady": 1293,
-   "refsReady": 3015,
-   "firstResult": 3561,
-   "intellisenseReady": 5099
+   "editorReady": 605,
+   "exec.runtimeCreated": 1816,
+   "exec.exportsReady": 1816,
+   "exec.refsReady": 3585,
+   "exec.firstResult": 4301,
+   "intelli.runtimeCreated": 4592,
+   "intelli.exportsReady": 4593,
+   "intelli.refsReady": 4687,
+   "intellisenseReady": 6995
   },
-  "firstResultMs": 546,
-  "firstCompletionMs": 588,
+  "firstResultMs": 715,
+  "firstCompletionMs": 1068,
   "lazy": {
    "files": 17,
    "rawBytes": 14493864,
-   "wireBytesBr": 4232330,
+   "wireBytesBr": 4232367,
    "fromCache": 0,
-   "downloadMs": 240,
-   "startMs": 675
+   "downloadMs": 286,
+   "startMs": 861
   },
   "coreBundle": {
    "bytes": 1204157,
    "from": "network",
-   "ms": 1625
+   "ms": 1639
   },
   "wireBytesAtFirstResult": {
-   "framework": 9825857,
+   "framework": 9827127,
    "ref": 275391,
    "lazy": 0,
-   "other": 232103,
+   "other": 240430,
    "cdn": 1066693
   },
   "wireBytesTotalAfterIntelliSense": {
-   "framework": 9825857,
-   "ref": 339106,
-   "lazy": 4232957,
-   "other": 232103,
-   "cdn": 4136255
+   "framework": 10170777,
+   "ref": 353932,
+   "lazy": 4232992,
+   "other": 473886,
+   "cdn": 4137717
   }
  },
  "warm": {
   "marks": {
-   "editorReady": 148,
-   "runtimeCreated": 376,
-   "exportsReady": 384,
-   "refsReady": 454,
-   "firstResult": 959,
-   "intellisenseReady": 2250
+   "editorReady": 249,
+   "exec.runtimeCreated": 657,
+   "exec.exportsReady": 657,
+   "exec.refsReady": 790,
+   "exec.firstResult": 1528,
+   "intelli.runtimeCreated": 1793,
+   "intelli.exportsReady": 1793,
+   "intelli.refsReady": 1882,
+   "intellisenseReady": 3939
   },
   "lazy": {
    "files": 17,
    "rawBytes": 14493864,
    "wireBytesBr": 0,
    "fromCache": 17,
-   "downloadMs": 37,
-   "startMs": 528
+   "downloadMs": 55,
+   "startMs": 730
   },
   "coreBundle": {
    "bytes": 1204157,
    "from": "cache",
-   "ms": 2
+   "ms": 3
   },
-  "firstCompletionMs": 691,
+  "firstCompletionMs": 1241,
   "wireBytes": {
-   "framework": 114546,
-   "ref": 4942,
-   "lazy": 627,
-   "other": 20881,
+   "framework": 229100,
+   "ref": 9884,
+   "lazy": 625,
+   "other": 35906,
    "cdn": 1066693
   }
  },
  "completionLatencyMsWarm": [
-  73,
-  157,
-  247,
-  91
+  130,
+  204,
+  352,
+  113
  ],
  "completionMsInEditor": [],
- "latency": {
-  "diagnostics": 511,
-  "classify": 513
- },
  "assets": []
 }
