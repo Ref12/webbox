@@ -1,4 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+  <!-- before the import: the props decide which packs to fetch from these -->
+  <PropertyGroup>
+    <WasmBuildNative>true</WasmBuildNative>
+  </PropertyGroup>
+  <Import Project="$(MSBuildThisFileDirectory)../../../build/NoWorkloadWasm.props" />
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <OutputType>Exe</OutputType>

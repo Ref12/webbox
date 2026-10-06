@@ -1,9 +1,10 @@
 // Stages the published app (dist/wwwroot) for a delivery target.
-//   node tools/stage.mjs <dist/wwwroot> <outDir> [--target=pages|cloudflare] [--mt=<dist-mt/wwwroot>]
+//   node tools/stage.mjs <dist/wwwroot> <outDir> [--target=pages|cloudflare] [--mt=<dist-mt/wwwroot>] [--aot=<dist-aot/wwwroot>]
 // target=pages (GitHub Pages: no headers, no Content-Encoding for precompressed files): only the big binaries keep their .br (fetched and decoded in the
 //   worker, see wwwroot/br.js, config.js BROTLI=true); every .gz and every .br of a text file is dropped (Pages gzips text itself).
 // target=cloudflare (Worker static assets): no .br/.gz at all and no decoder; the edge compresses. Writes _headers (COOP/COEP, cache rules, Content-Types).
 // --mt: the multithreaded .NET build (?threads=1); only its _framework is staged, as mt/_framework.
+// --aot: the opt-in AOT build (?aot=1 or the header toggle); only its _framework is staged, as aot/_framework.
 // Cache busting for both: GitHub Pages sends max-age=600. App files get content-hashed names (main.1a2b3c4d.js, references
 //    rewritten), dotnet.js and the data files get ?h=<hash> (hashes written into the manifests), the .NET framework files are already
 //    fingerprinted by the SDK, and the Cache API names carry a build id (hash of dotnet.js).
@@ -21,6 +22,10 @@ fs.cpSync(src, out, { recursive: true });
 if (opt.mt) {
   fs.cpSync(path.join(path.resolve(opt.mt), '_framework'), path.join(out, 'mt/_framework'), { recursive: true });
   fs.rmSync(path.join(out, 'mt/_framework/blazor.boot.json'), { force: true });
+}
+if (opt.aot) {
+  fs.cpSync(path.join(path.resolve(opt.aot), '_framework'), path.join(out, 'aot/_framework'), { recursive: true });
+  fs.rmSync(path.join(out, 'aot/_framework/blazor.boot.json'), { force: true });
 }
 const hash = (buf) => crypto.createHash('sha1').update(buf).digest('hex').slice(0, 10);
 const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]));
@@ -76,6 +81,7 @@ while (done.size < targets.length) {
       need("export const BUILD = 'dev';", "export const BUILD = '" + dotnetJsHash + "';");
       need('export const BROTLI = false;', 'export const BROTLI = ' + (target === 'pages') + ';');
       if (opt.mt) need("mt: './mt/_framework/dotnet.js'", "mt: './mt/_framework/dotnet.js?h=" + hash(fs.readFileSync(path.join(out, 'mt/_framework/dotnet.js'))) + "'");
+      if (opt.aot) need("aot: './aot/_framework/dotnet.js'", "aot: './aot/_framework/dotnet.js?h=" + hash(fs.readFileSync(path.join(out, 'aot/_framework/dotnet.js'))) + "'");
       need("ref: 'ref/manifest.json'", "ref: 'ref/manifest.json?h=" + hashOf('ref/manifest.json') + "'");
       need("lazy: 'lazy/manifest.json'", "lazy: 'lazy/manifest.json?h=" + hashOf('lazy/manifest.json') + "'");
       need("st: './_framework/dotnet.js'", "st: './_framework/dotnet.js?h=" + dotnetJsHash + "'");
@@ -101,8 +107,8 @@ if (target === 'cloudflare') {
     rule('/csharp/*', 'Cross-Origin-Opener-Policy: same-origin', 'Cross-Origin-Embedder-Policy: credentialless'),
     rule('/csharp/', 'Cache-Control: no-cache'), rule('/csharp/index.html', 'Cache-Control: no-cache'), rule('/csharp/build.json', 'Cache-Control: no-cache'),
     ...hashedApp.map((n) => rule(n, immutable)),
-    rule('/csharp/_framework/*', immutable), rule('/csharp/mt/_framework/*', immutable), rule('/csharp/ref/*', immutable), rule('/csharp/lazy/*', immutable),
-    rule('/csharp/_framework/*.wasm', wasmType), rule('/csharp/mt/_framework/*.wasm', wasmType),
+    rule('/csharp/_framework/*', immutable), rule('/csharp/mt/_framework/*', immutable), rule('/csharp/aot/_framework/*', immutable), rule('/csharp/ref/*', immutable), rule('/csharp/lazy/*', immutable),
+    rule('/csharp/_framework/*.wasm', wasmType), rule('/csharp/mt/_framework/*.wasm', wasmType), rule('/csharp/aot/_framework/*.wasm', wasmType),
     rule('/csharp/ref/*.bin', wasmType), rule('/csharp/ref/a/*', wasmType), rule('/csharp/lazy/*.dll', wasmType),
   ];
   fs.writeFileSync(path.join(out, '..', '_headers'), parts.join('\n'));   // the assets root: out is <root>/csharp

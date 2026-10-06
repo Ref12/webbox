@@ -4,15 +4,17 @@ import { registerIntellisense } from './intellisense.js';
 import { parseCommand, directiveSpans, handleCommand } from './commands.js';
 import { addCopyButton } from './copy.js';
 import { RuntimeClient, CancelledError, SessionLog } from './protocol.js';
-import { BUILD } from './config.js';
+import { BUILD, wantAot } from './config.js';
 
 const params = new URLSearchParams(location.search);
+const AOT = wantAot();   // opt-in AOT runtime build (?aot=1 or the remembered header toggle)
 const THREADS = params.get('threads') === '1';   // experimental multithreaded .NET (needs the COOP/COEP headers of the Cloudflare deployment)
 const $ = (id) => document.getElementById(id);
-const metrics = (window.__metrics = { marks: {}, completion: [], assets: [], build: BUILD, threadsRequested: THREADS });
+const metrics = (window.__metrics = { marks: {}, completion: [], assets: [], build: BUILD, threadsRequested: THREADS, aotRequested: AOT });
 const t0 = performance.now();
 const now = () => Math.round(performance.now() - t0);
 const mark = (k) => (metrics.marks[k] = now());
+{ const t = document.getElementById('aot'); if (t) { t.checked = AOT; t.onchange = () => { try { localStorage.setItem('webbox-aot', t.checked ? '1' : '0'); } catch {} const u = new URL(location.href); u.searchParams.delete('aot'); location.href = u.href; }; } }
 const setStatus = (s) => ($('status').textContent = s);
 const setBadge = (text, cls) => { const b = $('intelli'); b.textContent = text; b.className = 'badge ' + (cls || ''); };
 const fileName = (u) => decodeURIComponent(String(u?.url ?? u).split('?')[0].split('/').pop() || String(u));
@@ -193,7 +195,7 @@ async function main() {
     exec.restart('restart');
     metrics.restarts = (metrics.restarts || 0) + 1;
     setStatus('restarting the runtime…');
-    await exec.request('init', { threads: useThreadsRef.v });
+    await exec.request('init', { threads: useThreadsRef.v, aot: AOT });
     let replayed = 0;
     for (const code of log.codes) {
       setStatus('restoring the session (' + ++replayed + '/' + log.length + ')…');
@@ -279,17 +281,17 @@ async function main() {
   let useThreads = THREADS, info;
   if (THREADS) {
     // Experimental: .NET 10's threaded runtime does not start inside a Web Worker (see README); fall back to the normal runtime instead of hanging.
-    info = await Promise.race([exec.request('init', { threads: true }).catch((e) => ({ failed: String(e.message) })), new Promise((r) => setTimeout(() => r({ failed: 'timeout' }), 15000))]);
+    info = await Promise.race([exec.request('init', { threads: true, aot: AOT }).catch((e) => ({ failed: String(e.message) })), new Promise((r) => setTimeout(() => r({ failed: 'timeout' }), 15000))]);
     if (info.failed) {
       console.warn('threads=1: the threaded runtime did not start in the worker (' + info.failed + '); using the normal runtime');
       metrics.threadsFailed = info.failed; useThreads = false;
       exec.restart('threads fallback');
     }
   }
-  if (!info || info.failed) info = await exec.request('init', { threads: false });
+  if (!info || info.failed) info = await exec.request('init', { threads: false, aot: AOT });
   useThreadsRef.v = useThreads;
   assemblyNames = info.assemblies;
-  Object.assign(metrics, { threads: info.threads, cores: info.cores, crossOriginIsolated: info.crossOriginIsolated });
+  Object.assign(metrics, { aot: info.aot, threads: info.threads, cores: info.cores, crossOriginIsolated: info.crossOriginIsolated });
   metrics.ready = true;
   setStatus('ready');
   $('run').disabled = false; $('reset').disabled = false;
@@ -300,7 +302,7 @@ async function main() {
   try {
     setBadge('IntelliSense: starting runtime…', 'loading');
     intelliW.start();
-    await intelliW.request('init', { threads: false });   // IntelliSense never needs threads
+    await intelliW.request('init', { threads: false, aot: AOT });   // IntelliSense never needs threads
     await intelliW.request('loadIntellisense');
     for (const c of log.codes) await intelliW.request('track', { code: c });   // submissions made before it was ready
     intelliReady = true;

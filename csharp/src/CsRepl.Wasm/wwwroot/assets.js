@@ -2,7 +2,7 @@
 // JS side of Interop.FetchAsset / TakeAsset. No DOM: runs in a worker.
 import { BUILD, BROTLI } from './config.js';
 
-export function createAssets({ emit, threads = false }) {
+export function createAssets({ emit, threads = false, aot = false }) {
   const hashes = {};   // site path -> content hash (from the manifests): a changed file is a new URL
   const withHash = (p) => (hashes[p] ? p + '?h=' + hashes[p] : p);
   const net = { started: 0, done: 0, bytes: 0, retries: 0 };
@@ -86,7 +86,7 @@ export function createAssets({ emit, threads = false }) {
     } else for (const x of m.files || []) if (x.h) hashes['lazy/' + x.name] = x.h;
   }
   // The runtime's own downloads: Cache API first. Only on GitHub Pages is the .wasm taken from <file>.br; elsewhere the runtime's default (the server compresses).
-  const fwCacheName = 'csrepl-fw-' + BUILD + (threads ? '-mt' : '');
+  const fwCacheName = 'csrepl-fw-' + BUILD + (threads ? '-mt' : aot ? '-aot' : '');
   function loadBootResource(type, name, defaultUri) {
     if (!BROTLI || !/\.wasm$/.test(name)) return undefined;
     return (async () => {

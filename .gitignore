@@ -4,6 +4,7 @@ node_modules/
 .pnpm-store/
 dist/
 build/
+!/build/
 out/
 .cache/
 .parcel-cache/

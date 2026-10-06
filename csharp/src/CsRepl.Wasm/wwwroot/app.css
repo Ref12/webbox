@@ -4,6 +4,7 @@ body { height: 100dvh; overscroll-behavior: none; -webkit-text-size-adjust: 100%
 header { padding: 8px 14px; background: #252526; border-bottom: 1px solid #333; display: flex; gap: 12px; align-items: baseline; }
 .dim { color: #888; font-size: 12px; }
 .status { margin-left: auto; font-size: 12px; color: #9cdcfe; }
+.aot { font-size: 11px; color: #bbb; white-space: nowrap; }
 .badge { font-size: 11px; padding: 1px 8px; border-radius: 9px; background: #3a3a3a; color: #bbb; white-space: nowrap; }
 .badge.ready { background: #1f4d2b; color: #b5e8c3; } .badge.loading { background: #4d3f1f; color: #f0d79b; }
 main { flex: 1; display: flex; flex-direction: column; min-height: 0; }

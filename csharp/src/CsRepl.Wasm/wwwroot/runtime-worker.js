@@ -8,12 +8,12 @@ import { MANIFESTS, DOTNET } from './config.js';
 
 const role = self.name.startsWith('intelli') ? 'intelli' : 'exec';
 const emit = (event, data) => self.postMessage({ ...data, event });
-let assets, exportsRef, threads = false, currentOut = null;
+let assets, exportsRef, threads = false, aot = false, currentOut = null;
 
 async function boot(args) {
-  threads = !!args.threads;
-  assets = createAssets({ emit, threads });
-  const { dotnet } = await import(threads ? DOTNET.mt : DOTNET.st);
+  threads = !!args.threads; aot = !!args.aot && !threads;
+  assets = createAssets({ emit, threads, aot });
+  const { dotnet } = await import(threads ? DOTNET.mt : aot ? DOTNET.aot : DOTNET.st);
   const t0 = performance.now();
   const rt = await dotnet.withDiagnosticTracing(false).withResourceLoader(assets.loadBootResource).create();
   for (const k of await caches.keys()) if (k.startsWith('csrepl-fw-') && k !== assets.fwCacheName) await caches.delete(k);
@@ -48,11 +48,11 @@ const handlers = {
       const warm = JSON.parse(await I().Submit('1'));
       I().Reset();
       assets.markReady();
-      emit('metrics', { patch: { firstResultMs: Math.round(performance.now() - tw), wireBytesAtFirstResult: wire(), threads } });
+      emit('metrics', { patch: { firstResultMs: Math.round(performance.now() - tw), wireBytesAtFirstResult: wire(), threads, aot } });
       if (!warm.success) console.error('warm-up failed', warm);
       emit('metrics', { patch: { net: { ...assets.net } } });
       emit('mark', { name: 'firstResult' });
-      return { assemblies: man.assemblies.map((a) => a.name.replace(/\.dll$/i, '')), threads, cores: navigator.hardwareConcurrency, crossOriginIsolated: self.crossOriginIsolated };
+      return { assemblies: man.assemblies.map((a) => a.name.replace(/\.dll$/i, '')), threads, aot, cores: navigator.hardwareConcurrency, crossOriginIsolated: self.crossOriginIsolated };
     }
     return { threads };
   },
