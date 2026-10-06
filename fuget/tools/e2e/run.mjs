@@ -61,11 +61,11 @@ assert.match(decodeURIComponent(memberUrl), /\?m=M:Newtonsoft\.Json\.Linq\.JObje
 // ---------- 3. decompiled source (ILSpy decompiler in wasm) ----------
 await page.locator('.member.open a.btn', { hasText: 'Decompile this member' }).click();
 await page.waitForSelector('pre.decomp', { timeout: 240000 });
-const dcode = await page.locator('pre.decomp').innerText();
+const dcode = (await page.locator('pre.decomp').innerText()).replace(/\u00a0/g, ' ');   // the highlighter emits non-breaking spaces once it has run
 assert.match(dcode, /public (new )?static JObject Parse\(string json\)/);
 metrics.decompileMember = (await page.evaluate(() => window.__metrics.decompile)).at(-1);
 await page.getByRole('link', { name: 'Show whole type' }).click();
-await page.waitForFunction(() => document.querySelector('pre.decomp')?.innerText.includes('class JObject'), null, { timeout: 240000 });
+await page.waitForFunction(() => document.querySelector('pre.decomp')?.innerText.replace(/\u00a0/g, ' ').includes('class JObject'), null, { timeout: 240000 });
 metrics.decompileType = (await page.evaluate(() => window.__metrics.decompile)).at(-1);
 console.log('decompile member', JSON.stringify(metrics.decompileMember), 'type', JSON.stringify(metrics.decompileType));
 assert.deepEqual(metrics.decompileType.missing, [], 'all references resolved');
