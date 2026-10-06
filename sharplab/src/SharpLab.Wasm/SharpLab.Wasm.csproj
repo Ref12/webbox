@@ -33,6 +33,8 @@
   <!-- AOT needs IL trimming; the framework assemblies that user code and Roslyn-emitted code load by name must survive it -->
   <PropertyGroup Condition="'$(PublishTrimmed)' == 'true'">
     <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
+    <!-- AOT build: trim only the framework (partial); third-party assemblies (ILVerify, decompiler, Roslyn) stay whole, as the AOT compiler needs them to load -->
+    <TrimMode>partial</TrimMode>
   </PropertyGroup>
   <ItemGroup Condition="'$(PublishTrimmed)' == 'true'">
     <TrimmerRootAssembly Include="System.Runtime;System.Linq;System.Collections;System.Console;System.Private.CoreLib;System.Runtime.Extensions;System.Threading;System.Threading.Tasks;System.Text.RegularExpressions;System.Linq.Expressions;System.Collections.Concurrent;System.Collections.Immutable;System.Memory;System.Numerics;System.Text.Json;System.Net.Http;System.IO;System.Globalization;System.ComponentModel;System.Diagnostics.Debug;System.Runtime.InteropServices;System.Runtime.Numerics;System.Linq.Queryable;System.ObjectModel;System.Private.Uri;System.Xml.Linq;System.Collections.NonGeneric;System.Collections.Specialized" />
