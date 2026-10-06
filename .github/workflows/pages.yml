@@ -45,7 +45,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ matrix.app }}/dist-aot
-          key: aot-${{ matrix.app }}-${{ hashFiles(format('{0}/src/**', matrix.app), 'shared/**', 'build/**', format('{0}/tools/**', matrix.app)) }}
+          # Only what changes the AOT _framework output: the app's C# sources and projects (not its wwwroot JS/HTML/CSS, which staging takes from the
+          # relink build), its lib/ and Prepare*.cs, the shared C# projects and PrepareLazy, build/. NOT stage.mjs, config.js, e2e or this file.
+          # Bump v1 when the publish flags in the build step below change.
+          key: aot-v1-${{ matrix.app }}-${{ hashFiles(format('{0}/src/**', matrix.app), format('!{0}/src/**/wwwroot/**', matrix.app), format('{0}/lib/**', matrix.app), format('{0}/tools/Prepare*.cs', matrix.app), 'shared/IntelliHost/**', 'shared/Intellisense/**', 'shared/tools/**', 'build/**') }}
       - name: Build the AOT runtime
         if: steps.aotcache.outputs.cache-hit != 'true'
         working-directory: ${{ matrix.app }}
