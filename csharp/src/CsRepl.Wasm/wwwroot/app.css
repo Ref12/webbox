@@ -54,3 +54,8 @@ button:disabled { background: #444; cursor: default; }
   button:not(.copy) { min-height: 44px; padding: 8px 16px; font-size: 16px; touch-action: manipulation; }
   #run { flex: 1; }
 }
+
+#stop { background: #8b2d2d; color: #fff; }
+#stop[hidden] { display: none; }
+.out.live { white-space: pre-wrap; font-family: inherit; color: #ccc; margin: 4px 0; }
+button.linklike { background: none; border: 0; color: #7cb7ff; text-decoration: underline; cursor: pointer; font: inherit; padding: 0; }
