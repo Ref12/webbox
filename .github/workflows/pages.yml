@@ -3,7 +3,7 @@ name: Deploy (GitHub Pages + Cloudflare Worker)
 # Ref12/webbox: public web tools. Two targets from one build: GitHub Pages (ref12.github.io/webbox/) and the Cloudflare Worker `webbox`
 # (static assets, wrangler.jsonc; secrets CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID; https://webbox.<account>.workers.dev/). The C# REPL is built once;
 # stage.mjs --target=pages|cloudflare makes the two copies. Every app in this repository is static: each folder is published as it is, no build step,
-# except the .NET WebAssembly apps csharp/ (C# REPL), fuget/ (NuGet package browser) and sharplab/ (SharpLab-style playground):
+# except the .NET WebAssembly apps (ILSpy at /ilspy/ and the Roslyn Quoter at /quoter/ are built from pinned commits of forks, not copied) csharp/ (C# REPL), fuget/ (NuGet package browser) and sharplab/ (SharpLab-style playground):
 # their sources are not copied; each is built (reference-assembly prep + dotnet publish, no workloads; relink via build/NoWorkloadWasm.props) and staged at /csharp/, /fuget/ and /sharplab/.
 # sharplab/tools/stage.mjs is the Pages-style staging (.br decoded in the page), used for both targets; --target=cloudflare adds the 25 MiB per-file check.
 on:
@@ -118,23 +118,48 @@ jobs:
           dotnet run tools/PrepareRefs.cs
           dotnet run tools/PrepareLazy.cs        # IntelliSense assemblies -> wwwroot/lazy (shared/Intellisense, fetched after first paint)
           dotnet publish src/SharpLab.Wasm -c Release -o dist
+      # --- ILSpy in the browser (Avalonia, .NET WebAssembly): built from a pinned commit of the fork ljcollins25/ILSpy (branch browser), not copied ---
+      - name: Check out ILSpy
+        uses: actions/checkout@v4
+        with:
+          repository: ljcollins25/ILSpy
+          ref: f83873649e14fba7034f0cc0447069b7366445d5
+          path: ilspy-src
+      - name: Build ILSpy
+        run: |
+          ilspy-src/ILSpy.Browser/build-static.sh "$PWD/_ilspy_pages" --target=pages
+          ilspy-src/ILSpy.Browser/build-static.sh "$PWD/_ilspy_cf" --target=cloudflare --base=/ilspy --headers="$PWD/_ilspy_headers"
+      # --- Roslyn Quoter (browser-only, .NET WebAssembly): built from a pinned commit of the fork ljcollins25/RoslynQuoter (branch browser), not copied ---
+      - name: Check out the Roslyn Quoter
+        uses: actions/checkout@v4
+        with:
+          repository: ljcollins25/RoslynQuoter
+          ref: 5c3566265e4a401a1c31864350b48562edd373ef
+          path: quoter-src
+      - name: Build the Roslyn Quoter
+        run: WEBBOX_DIR="$PWD" quoter-src/src/Quoter.Browser/build-static.sh "$PWD/quoter-dist"
       - name: Stage the site
         run: |
           mkdir -p _site
-          rsync -a --exclude '.git' --exclude '.github' --exclude '_site' --exclude '/csharp' --exclude '/sharplab' --exclude 'README.md' ./ _site/
+          rsync -a --exclude '.git' --exclude '.github' --exclude '_site' --exclude '/csharp' --exclude '/sharplab' --exclude '/ilspy-src' --exclude '/_ilspy_pages' --exclude '/_ilspy_cf' --exclude '/_ilspy_headers' --exclude '/quoter-src' --exclude '/quoter-dist' --exclude 'README.md' ./ _site/
           # csharp/ -> _site/csharp/: app files with content-hashed names, big binaries only as .br (decoded in the page; Pages cannot send Content-Encoding for them)
           node csharp/tools/stage.mjs csharp/dist/wwwroot _site/csharp --target=pages --aot=csharp/dist-aot/wwwroot
           # fuget: publish output replaces the copied sources
           rm -rf _site/fuget && mkdir -p _site/fuget && cp -r fuget/dist/wwwroot/. _site/fuget/
           node sharplab/tools/stage.mjs sharplab/dist/wwwroot _site/sharplab --aot=sharplab/dist-aot/wwwroot
+          mkdir -p _site/ilspy && cp -r _ilspy_pages/. _site/ilspy/
+          rm -rf _site/quoter && cp -r quoter-dist _site/quoter
           touch _site/.nojekyll
       - name: Stage the Cloudflare site
         run: |
           # same apps, but csharp/ without .br files or decoder: the edge compresses; _headers gives COOP/COEP, caching and Content-Types
-          rsync -a --exclude '.git' --exclude '.github' --exclude '_site' --exclude '_cf_site' --exclude '/csharp' --exclude '/sharplab' --exclude 'README.md' --exclude 'wrangler.jsonc' ./ _cf_site/
+          rsync -a --exclude '.git' --exclude '.github' --exclude '_site' --exclude '_cf_site' --exclude '/csharp' --exclude '/sharplab' --exclude '/ilspy-src' --exclude '/_ilspy_pages' --exclude '/_ilspy_cf' --exclude '/_ilspy_headers' --exclude '/quoter-src' --exclude '/quoter-dist' --exclude 'README.md' --exclude 'wrangler.jsonc' ./ _cf_site/
           node csharp/tools/stage.mjs csharp/dist/wwwroot _cf_site/csharp --target=cloudflare --mt=csharp/dist-mt/wwwroot --aot=csharp/dist-aot/wwwroot
           rm -rf _cf_site/fuget && mkdir -p _cf_site/fuget && cp -r fuget/dist/wwwroot/. _cf_site/fuget/
           node sharplab/tools/stage.mjs sharplab/dist/wwwroot _cf_site/sharplab --target=cloudflare --aot=sharplab/dist-aot/wwwroot
+          mkdir -p _cf_site/ilspy && cp -r _ilspy_cf/. _cf_site/ilspy/
+          cat _ilspy_headers >> _cf_site/_headers    # after csharp's stage.mjs wrote _headers
+          rm -rf _cf_site/quoter && cp -r quoter-dist _cf_site/quoter
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
