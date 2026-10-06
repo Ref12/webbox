@@ -1,0 +1,4 @@
+app/out
+build/
+*.wasm
+*.data
