@@ -77,7 +77,7 @@ await page.selectOption('#level', '3');
 await page.waitForTimeout(300);
 cs = await outText('out-cs');
 assert.doesNotMatch(cs, /DisplayClass/, 'level 3 hides it');
-assert.match(cs, /Where/);
+assert.match(cs, /where n > limit/, 'level 3 shows the query expression');
 await page.selectOption('#level', '2');
 
 // IL + Debug/Release
