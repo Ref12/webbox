@@ -1,4 +1,4 @@
-// ?threads=1 on the Cloudflare-like server: checks the threaded runtime boots, and measures Parallel.For / Task.Run against a single-thread loop.
+// ?threads=1 on the Cloudflare-like server. .NET 10's threaded runtime does not start inside a Worker (see README), so the page must fall back to the normal runtime and still work.
 //   node threads.mjs <_cf_site>
 import { chromium } from 'playwright-core';
 import { spawn } from 'node:child_process';
@@ -16,19 +16,14 @@ page.on('pageerror', (e) => console.log('[pageerror]', e.message));
 let bytes = 0; page.on('response', async (r) => { try { bytes += Number((await r.allHeaders())['content-length'] || 0); } catch {} });
 const t0 = Date.now();
 await page.goto('http://localhost:' + port + '/csharp/?threads=1');
-await page.waitForFunction(() => window.__metrics?.ready || window.__metrics?.error, null, { timeout: 240000 });
+await page.waitForFunction(() => window.__metrics?.ready || window.__metrics?.error, null, { timeout: 200000 });
 const m = await page.evaluate(() => window.__metrics);
 console.log('ready after', Date.now() - t0, 'ms; MB on the wire so far', (bytes / 1048576).toFixed(1), JSON.stringify({ err: m.error, threads: m.threads, cores: m.cores, isolated: m.crossOriginIsolated, firstResultMs: m.firstResultMs }));
 assert.equal(m.error, undefined, m.error);
 assert.equal(m.crossOriginIsolated, true);
-const run = async (code) => { await page.evaluate((c) => window.__submit(c), code); const e = page.locator('.entry').last(); return { val: (await e.locator('.val').count()) ? (await e.locator('.val').innerText()).trim() : null, err: (await e.locator('.err').count()) ? (await e.locator('.err').first().innerText()) : null }; };
-console.log('SharedArrayBuffer:', await run('typeof(object).Assembly.GetName().Name'));
-const work = 'static long Spin(int n) { long s = 0; for (int i = 0; i < n; i++) s += i % 7; return s; }';
-console.log(await run(work));
-const N = 60_000_000;
-const seq = await run(`var sw = System.Diagnostics.Stopwatch.StartNew(); for (int k = 0; k < 4; k++) Spin(${N}); sw.ElapsedMilliseconds`);
-const par = await run(`var sw2 = System.Diagnostics.Stopwatch.StartNew(); System.Threading.Tasks.Parallel.For(0, 4, k => Spin(${N})); sw2.ElapsedMilliseconds`);
-const tr = await run(`var sw3 = System.Diagnostics.Stopwatch.StartNew(); await Task.WhenAll(Enumerable.Range(0, 4).Select(k => Task.Run(() => Spin(${N})))); sw3.ElapsedMilliseconds`);
-const ids = await run('var ids = new System.Collections.Concurrent.ConcurrentBag<int>(); System.Threading.Tasks.Parallel.For(0, 8, k => { ids.Add(Environment.CurrentManagedThreadId); Spin(5000000); }); ids.Distinct().Count()');
-console.log(JSON.stringify({ sequential4_ms: seq, parallelFor4_ms: par, taskRun4_ms: tr, distinctThreadIds: ids, cores: m.cores }));
+assert.ok(m.threadsFailed, 'the threaded runtime is reported as failed');
+await page.evaluate(() => window.__submit('Enumerable.Range(1, 4).Sum()'));
+assert.equal((await page.locator('.entry').last().locator('.val').innerText()).trim(), '10', 'REPL works after the fallback');
+console.log('threads=1 fell back:', m.threadsFailed, '| REPL works | ready after', Date.now() - t0, 'ms');
 await browser.close(); server.kill();
+console.log('THREADS FALLBACK OK');
