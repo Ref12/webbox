@@ -26,14 +26,16 @@ export function externalLink(url, text) { return '<a href="' + esc(url) + '" tar
 function inline(s) {
   // s is raw text: escape pieces ourselves so links and code can be built safely
   const parts = [];
-  const re = /`([^`\n]+)`|\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)|(https?:\/\/[^\s<)]+)|\*\*([^*\n]+)\*\*/g;
+  const re = /`([^`\n]+)`|\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)|(https?:\/\/[^\s<)]+)|\*\*([^*\n]+)\*\*|~~([^~\n]+)~~|(?<![\w*])\*([^*\s][^*\n]*)\*(?![\w*])/g;
   let last = 0, m;
   while ((m = re.exec(s))) {
     parts.push(esc(s.slice(last, m.index)));
     if (m[1] !== undefined) parts.push('<code>' + esc(m[1]) + '</code>');
     else if (m[2] !== undefined) parts.push(externalLink(m[3], m[2]));
     else if (m[4] !== undefined) parts.push(externalLink(m[4]));
-    else parts.push('<b>' + esc(m[5]) + '</b>');
+    else if (m[5] !== undefined) parts.push('<b>' + esc(m[5]) + '</b>');
+    else if (m[6] !== undefined) parts.push('<s>' + esc(m[6]) + '</s>');
+    else parts.push('<i>' + esc(m[7]) + '</i>');
     last = re.lastIndex;
   }
   parts.push(esc(s.slice(last)));
@@ -59,6 +61,8 @@ export function mdLite(text) {
     }
     const h = line.match(/^(#{1,6})\s+(.*)/);
     if (h) { flush(); out.push('<h4>' + inline(h[2]) + '</h4>'); i++; continue; }
+    const bq = line.match(/^\s*>\s?(.*)/);
+    if (bq) { flush(); const q = [bq[1]]; for (i++; i < lines.length && /^\s*>/.test(lines[i]); i++) q.push(lines[i].replace(/^\s*>\s?/, '')); out.push('<blockquote>' + q.map(inline).join('<br>') + '</blockquote>'); continue; }
     const li = line.match(/^\s*(?:[-*]|\d+\.)\s+(.*)/);
     if (li) { flush(); out.push('<div class="li">• ' + inline(li[1]) + '</div>'); i++; continue; }
     if (!line.trim()) { flush(); i++; continue; }

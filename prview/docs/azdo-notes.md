@@ -46,10 +46,11 @@ big-PR behaviour (virtualization, lazy loading) is therefore our own design, tes
 * **Full view ("View").** The button toggles that file between "changes with 3 lines of context" and the whole file. AzDO opens a separate single-file page with a change overview strip;
   we keep it in place (it is still virtualized) and add next/previous change navigation (`n`/`p`, ↑/↓ buttons). The overview strip is not copied.
 * **Keyboard.** The AzDO diff has ↑ ↓ change navigation buttons in the full-file view and tab/arrow navigation in the tree. We add `j`/`k` (file), `n`/`p` (change), `r`, `c`, `s`, `f`, `a`, `/`, `t`, `?`.
-* **Comments.** AzDO shows threads inline below the line (and an "Add comment" affordance). We show GitHub review threads at their lines (read only); outdated ones are listed at the top of the file.
+* **Comments.** None of the captured pages has a comment thread (the public PRs have none; `Home.md` was the only real edit and nobody commented on it), so the thread look is from the AzDO conventions we saw elsewhere on those pages (cards with a soft shadow, avatar + name + time, a status pill at the top, a reply box at the bottom) rather than from a screenshot of a thread. v2 copies: **boxes between the lines** the thread refers to (in every view mode), a header with the status (**Active / Resolved / Pending / Outdated**) and a chevron to collapse, a **reply** box, **Resolve / Unresolve**, a hover **+** in the gutter that opens an inline composer (Write / Preview, multi-line by shift-click or drag), and AzDO's *Comments* list as a side panel with jump-to. Resolved threads start collapsed. GitHub has no "Won't fix / Closed" states, so the status is just active or resolved. Outdated threads (their lines are gone) are listed per file under a collapsible "Outdated comments" line.
 
 ## Deliberately different
 
 * We style it with GitHub-neutral colours and a dark theme; AzDO's left product navigation is omitted (the app is one page).
 * GitHub PRs have no iterations/policies/votes: the header shows state, author, branches and a link to GitHub.
-* Long lines: inline scrolls sideways; side-by-side clips (the two halves share the screen). Use inline for wide code.
+* Long lines: inline scrolls sideways; side-by-side **wraps each long line inside its pane** (rows grow), so nothing is clipped and there is no sideways scroll.
+* Review comments post straight away (**Comment**) or collect into a pending review (**Add to review**, then **Finish review** with Comment / Approve / Request changes), as on GitHub; AzDO's per-reviewer votes do not exist here.
