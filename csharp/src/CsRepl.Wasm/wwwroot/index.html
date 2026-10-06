@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>C# interactive (.NET WebAssembly)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header>
+  <strong>C# interactive</strong> <span class="dim">Roslyn on .NET WebAssembly &mdash; compiled, completed and run in your browser</span>
+  <span id="intelli" class="badge" title="IntelliSense (Roslyn Features) loads after the first paint">IntelliSense: waiting</span>
+  <span id="status" class="status">loading&hellip;</span>
+</header>
+<main>
+  <section id="transcript" aria-live="polite"></section>
+  <section id="input">
+    <div id="editor"></div>
+    <div class="bar">
+      <button id="run" disabled>&#9654; Run</button>
+      <button id="reset" disabled>Reset session</button>
+      <span class="dim hint">Enter runs when complete &middot; Shift+Enter newline &middot; Ctrl+&uarr;/&darr; history &middot; <code>#r "nuget: Pkg, ver"</code></span>
+    </div>
+  </section>
+</main>
+<script type="module" src="main.js"></script>
+</body>
+</html>

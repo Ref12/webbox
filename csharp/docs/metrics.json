@@ -1,0 +1,83 @@
+{
+ "cold": {
+  "marks": {
+   "editorReady": 588,
+   "runtimeCreated": 1702,
+   "exportsReady": 1730,
+   "refsReady": 1910,
+   "firstResult": 2771,
+   "intellisenseReady": 5090
+  },
+  "firstResultMs": 861,
+  "firstCompletionMs": 936,
+  "lazy": {
+   "files": 17,
+   "rawBytes": 14492840,
+   "wireBytesBr": 4231966,
+   "fromCache": 0,
+   "downloadMs": 310,
+   "startMs": 1035
+  },
+  "coreBundle": {
+   "bytes": 1204157,
+   "from": "network",
+   "ms": 29
+  },
+  "wireBytesAtFirstResult": {
+   "framework": 9809778,
+   "ref": 273213,
+   "lazy": 0,
+   "other": 11380,
+   "cdn": 1066693
+  },
+  "wireBytesTotalAfterIntelliSense": {
+   "framework": 9809778,
+   "ref": 332474,
+   "lazy": 4232357,
+   "other": 11380,
+   "cdn": 4134766
+  }
+ },
+ "warm": {
+  "marks": {
+   "editorReady": 204,
+   "runtimeCreated": 1136,
+   "exportsReady": 1146,
+   "refsReady": 1247,
+   "firstResult": 1994,
+   "intellisenseReady": 3912
+  },
+  "lazy": {
+   "files": 17,
+   "rawBytes": 14492840,
+   "wireBytesBr": 0,
+   "fromCache": 17,
+   "downloadMs": 81,
+   "startMs": 777
+  },
+  "coreBundle": {
+   "bytes": 1204157,
+   "from": "cache",
+   "ms": 4
+  },
+  "firstCompletionMs": 1025,
+  "wireBytes": {
+   "framework": 9809748,
+   "ref": 2794,
+   "lazy": 391,
+   "other": 11380,
+   "cdn": 1066693
+  }
+ },
+ "completionLatencyMsWarm": [
+  136,
+  218,
+  350,
+  141
+ ],
+ "completionMsInEditor": [],
+ "latency": {
+  "diagnostics": 785
+ },
+ "assets": []
+}

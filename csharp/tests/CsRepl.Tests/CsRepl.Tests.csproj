@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
+    <PackageReference Include="xunit" Version="2.*" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.*" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The same reference assemblies the browser app ships, so tests exercise real ref-pack compilation. -->
+    <PackageReference Include="Microsoft.NETCore.App.Ref" Version="10.0.12" GeneratePathProperty="true" PrivateAssets="all" ExcludeAssets="compile;runtime" />
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>RefPackDir</_Parameter1>
+      <_Parameter2>$(PkgMicrosoft_NETCore_App_Ref)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/CsRepl.Core/CsRepl.Core.csproj" />
+    <ProjectReference Include="../../src/CsRepl.Intellisense/CsRepl.Intellisense.csproj" />
+  </ItemGroup>
+</Project>

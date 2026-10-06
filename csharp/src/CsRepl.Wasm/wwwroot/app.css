@@ -1,0 +1,55 @@
+:root { color-scheme: dark; --page: #1e1e1e; --code: #2a2d33; --code-line: #3a3e46; --out: #151617; --val: #13222f; --err: #3a1d20; --mono: "Cascadia Code", "Cascadia Mono", ui-monospace, Menlo, Consolas, monospace; }
+* { box-sizing: border-box; }
+body { height: 100dvh; overscroll-behavior: none; -webkit-text-size-adjust: 100%; margin: 0; font: 14px/1.4 system-ui, sans-serif; background: var(--page); color: #dcdcdc; display: flex; flex-direction: column; }
+header { padding: 8px 14px; background: #252526; border-bottom: 1px solid #333; display: flex; gap: 12px; align-items: baseline; }
+.dim { color: #888; font-size: 12px; }
+.status { margin-left: auto; font-size: 12px; color: #9cdcfe; }
+.badge { font-size: 11px; padding: 1px 8px; border-radius: 9px; background: #3a3a3a; color: #bbb; white-space: nowrap; }
+.badge.ready { background: #1f4d2b; color: #b5e8c3; } .badge.loading { background: #4d3f1f; color: #f0d79b; }
+main { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+#transcript { flex: 1; overflow: auto; padding: 12px 14px; font: 13px/1.5 var(--mono); }
+.entry { margin-bottom: 14px; max-width: 110ch; }
+
+/* code and output are told apart by background, not by a prompt symbol */
+.code { position: relative; background: var(--code); border: 1px solid var(--code-line); border-radius: 8px; padding: 10px 44px 10px 14px; }
+.code pre { margin: 0; font: inherit; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 4; }
+.copy { position: absolute; top: 6px; right: 6px; width: 28px; height: 28px; min-height: 0; padding: 0; display: grid; place-items: center; background: transparent; color: #9aa0a6; border-radius: 6px; opacity: .75; }
+.copy:hover, .copy:focus-visible { background: #3a3e46; color: #fff; opacity: 1; }
+.copy.done { color: #6fdc8c; opacity: 1; }
+.copy svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.block { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 4px; padding: 8px 14px; border-radius: 6px; }
+.out { background: var(--out); color: #cfcfcf; }
+.val { background: var(--val); color: #ce9178; }
+.err { background: var(--err); color: #f48771; }
+.load, .ms { color: #7d7d7d; font-size: 11px; margin: 3px 4px 0; }
+.load { color: #8aa6c1; }
+.note { color: #7d7d7d; font-size: 11px; margin: 0 4px 12px; }
+
+/* Visual Studio dark classification colours */
+.t-keyword { color: #569cd6; } .t-keywordControl { color: #d8a0df; }
+.t-class, .t-struct, .t-delegate, .t-typeParam { color: #4ec9b0; } .t-interface, .t-enum { color: #b8d7a3; }
+.t-method, .t-property, .t-field, .t-local, .t-event, .t-namespace, .t-constant, .t-enumMember, .t-label { color: #dcdcdc; }
+.t-parameter { color: #9cdcfe; }
+.t-string, .t-regex { color: #d69d85; } .t-stringEscape { color: #ffd68f; } .t-number { color: #b5cea8; }
+.t-comment { color: #57a64a; } .t-xmlDoc { color: #608b4e; } .t-operator { color: #b4b4b4; } .t-preproc { color: #9b9b9b; }
+
+#input { border-top: 1px solid #333; background: var(--page); padding: 8px 14px 0; }
+#editor { min-height: 56px; height: 84px; border: 1px solid var(--code-line); border-radius: 8px; overflow: hidden; background: var(--code); }
+#editor textarea.fallback { width: 100%; height: 100%; background: var(--code); color: #ddd; border: 0; padding: 8px; font: 13px var(--mono); resize: none; }
+.bar { padding: 6px 0; display: flex; gap: 10px; align-items: center; }
+.bar code { background: #2d2d2d; padding: 0 4px; border-radius: 3px; }
+button { background: #0e639c; color: #fff; border: 0; padding: 5px 12px; border-radius: 4px; cursor: pointer; }
+button:disabled { background: #444; cursor: default; }
+
+@media (max-width: 700px) {
+  header { flex-wrap: wrap; padding: 6px 10px; gap: 4px 10px; }
+  header .dim { display: none; }
+  #transcript { padding: 8px 10px; font-size: 12px; }
+  #input { padding: 6px 10px 0; }
+  .code { padding: 8px 42px 8px 10px; }
+  .copy { width: 36px; height: 36px; top: 2px; right: 2px; }
+  .bar { padding: 6px 0 calc(6px + env(safe-area-inset-bottom)); }
+  .bar .hint { display: none; }
+  button:not(.copy) { min-height: 44px; padding: 8px 16px; font-size: 16px; touch-action: manipulation; }
+  #run { flex: 1; }
+}
