@@ -165,6 +165,22 @@ await p2.page.close();
 await tab('jit');
 const jit = await page.locator('#jit').innerText();
 assert.match(jit, /interpreter/i); assert.match(jit, /DOTNET_JitDisasm/);
+// the tab can talk to a JIT endpoint (jit/endpoint/server.mjs, when its runner is built: dotnet build -c Release jit/endpoint/JitRunner)
+const endpointDir = path.resolve('../../jit/endpoint');
+if (fs.existsSync(path.join(endpointDir, 'JitRunner/bin/Release/net10.0/JitRunner.dll'))) {
+  const ep = spawn(process.execPath, ['server.mjs', '8787'], { cwd: endpointDir, stdio: 'ignore' }); servers.push(ep);
+  await new Promise((r) => setTimeout(r, 800));
+  await page.evaluate(() => window.__sharplab.setCode('public class Calc { public static int Add(int a, int b) => a + b; }'));
+  await page.waitForFunction(() => window.__sharplab.last?.success);
+  await tab('jit');
+  await page.fill('#jit-url', 'http://localhost:8787/jit'); await page.fill('#jit-method', 'Add');
+  const tj = Date.now();
+  await page.click('#jit-go');
+  await page.waitForFunction(() => /Assembly listing for method Calc:Add/.test(document.getElementById('jit-out').textContent), null, { timeout: 30000 });
+  metrics.jitEndpointMs = Date.now() - tj;
+  assert.match(await page.locator('#jit-out').innerText(), /lea\s+eax, \[rdi\+rsi\]|add\s/);
+  ep.kill();
+} else console.log('JIT endpoint check skipped (JitRunner not built)');
 
 // ---------- 5. timings + screenshot ----------
 await page.evaluate(() => window.__sharplab.setCode(`using System;
