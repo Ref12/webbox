@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>fuget — NuGet package browser on .NET WebAssembly</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Browse NuGet packages: types, members, XML docs, decompiled C#, dependencies and API diffs, entirely in your browser.">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header>
+  <button id="menu" class="icon" aria-label="Toggle tree">&#9776;</button>
+  <a class="brand" href="#/"><strong>fuget</strong><span class="dim"> .NET on WebAssembly</span></a>
+  <div class="search">
+    <input id="q" type="search" placeholder="Search NuGet packages…" autocomplete="off" aria-label="Search packages" spellcheck="false">
+    <div id="suggest" class="suggest" hidden></div>
+  </div>
+  <select id="version" aria-label="Version" hidden></select>
+  <span id="status" class="status">loading&hellip;</span>
+</header>
+<div id="layout">
+  <nav id="tree" aria-label="Package tree"></nav>
+  <main>
+    <div id="crumbs" class="crumbs"></div>
+    <div id="tabs" class="tabs" role="tablist"></div>
+    <section id="panel" aria-live="polite"><p class="busy">Loading&hellip;</p></section>
+  </main>
+</div>
+<script type="module" src="main.js"></script>
+</body>
+</html>

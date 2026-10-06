@@ -6,6 +6,8 @@ public sealed class PackageSummary
     public long Size { get; set; }
     public NuspecInfo Nuspec { get; set; } = new();
     public List<FrameworkInfo> Frameworks { get; set; } = new();
+    /// <summary>Lib folder -> target framework of the nuspec dependency group that applies to it ("" = unconditional group).</summary>
+    public Dictionary<string, string> DependencyGroupFor { get; set; } = new();
 }
 
 /// <summary>The app's non-UI logic: open a package, read an assembly's API with docs, diff two versions, decompile. UI-free so it is unit-tested on Linux and Windows.</summary>
@@ -24,7 +26,9 @@ public sealed class FugetService
     public async Task<PackageSummary> OpenAsync(string id, string? version)
     {
         var p = await Store.GetAsync(id, version);
-        return new PackageSummary { Id = p.Nuspec.Id, Version = p.Nuspec.Version, Size = p.Bytes.Length, Nuspec = p.Nuspec, Frameworks = p.Frameworks };
+        return new PackageSummary
+        { Id = p.Nuspec.Id, Version = p.Nuspec.Version, Size = p.Bytes.Length, Nuspec = p.Nuspec, Frameworks = p.Frameworks,
+            DependencyGroupFor = p.Frameworks.Select(f => (f.Dir, G: p.DependenciesFor(f.Tfm))).Where(x => x.G != null).ToDictionary(x => x.Dir, x => x.G!.Tfm) };
     }
 
     private async Task<(Package P, FrameworkInfo Fw)> Locate(string id, string version, string dir)

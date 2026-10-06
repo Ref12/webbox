@@ -111,7 +111,7 @@ public sealed class Package
             }
         }
         foreach (var f in result.Values) { f.Assemblies.Sort(StringComparer.OrdinalIgnoreCase); f.DocFiles.Sort(StringComparer.OrdinalIgnoreCase); }
-        return result.Values.OrderBy(f => f.Kind == "ref" ? 0 : 1).ThenBy(f => Tfm.Order(f.Tfm)).ThenBy(f => f.Tfm, StringComparer.Ordinal).ToList();
+        return result.Values.OrderBy(f => f.Kind == "lib" ? 0 : 1).ThenBy(f => Tfm.Order(f.Tfm)).ThenBy(f => f.Tfm, StringComparer.Ordinal).ToList();
     }
 
     /// <summary>Dependency group that applies to a lib folder: exact tfm, else best compatible, else the unconditional group.</summary>
