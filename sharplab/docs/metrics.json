@@ -1,0 +1,108 @@
+{
+  "pagesLike_gzip": {
+    "cold": {
+      "firstViewMs": 3873,
+      "marks": {
+        "editorReady": 519,
+        "runtimeCreated": 1446,
+        "exportsReady": 1469,
+        "refsReady": 1648,
+        "firstView": 3873,
+        "firstCompileDone": 3874
+      },
+      "wireBytes": {
+        "framework": 14297152,
+        "ref": 569043,
+        "app": 13600,
+        "cdn": 1111045,
+        "files": 198
+      },
+      "wireBytesEncodedBody": 14878853,
+      "compiles": [
+        {
+          "ms": 1669,
+          "coreMs": 1548,
+          "bytes": 3584
+        }
+      ],
+      "coreBundle": {
+        "bytes": 1204157,
+        "from": "network",
+        "ms": 23
+      }
+    },
+    "warm": {
+      "firstViewMs": 3619,
+      "marks": {
+        "editorReady": 498,
+        "runtimeCreated": 1200,
+        "exportsReady": 1219,
+        "refsReady": 1392,
+        "firstView": 3619,
+        "firstCompileDone": 3619
+      },
+      "coreBundle": {
+        "bytes": 1204157,
+        "from": "cache",
+        "ms": 5
+      }
+    }
+  },
+  "brotli": {
+    "cold": {
+      "firstViewMs": 3944,
+      "marks": {
+        "editorReady": 523,
+        "runtimeCreated": 1516,
+        "exportsReady": 1542,
+        "refsReady": 1712,
+        "firstView": 3944,
+        "firstCompileDone": 3945
+      },
+      "wireBytes": {
+        "framework": 11244888,
+        "ref": 495427,
+        "app": 11531,
+        "cdn": 1111045,
+        "files": 202
+      }
+    }
+  },
+  "verify": "✔ All methods verified.  (8 ms, ILVerify)",
+  "shareLinkLength": 197,
+  "compileMsLast5": [
+    {
+      "ms": 42,
+      "coreMs": 26,
+      "bytes": 2560
+    },
+    {
+      "ms": 25,
+      "coreMs": 16,
+      "bytes": 2560
+    },
+    {
+      "ms": 23,
+      "coreMs": 15,
+      "bytes": 2560
+    },
+    {
+      "ms": 178,
+      "coreMs": 171,
+      "bytes": 6656
+    },
+    {
+      "ms": 89,
+      "coreMs": 84,
+      "bytes": 6656
+    }
+  ],
+  "viewMs": {
+    "cs": 437,
+    "il": 2,
+    "syntax": 9,
+    "run": 0,
+    "verify": 5,
+    "jit": 0
+  }
+}
