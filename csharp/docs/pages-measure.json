@@ -1,0 +1,56 @@
+[
+ {
+  "mode": "A  .br decoded in the page (shipped)",
+  "profile": "cable 25 Mbit/s, 20 ms",
+  "firstResultMs": 4871,
+  "intellisenseReadyMs": 7631,
+  "mbToFirstResult": 9.89,
+  "mbTotal": 13.93,
+  "warmFirstResultMs": 935
+ },
+ {
+  "mode": "A  .br decoded in the page (shipped)",
+  "profile": "mobile 8 Mbit/s, 60 ms",
+  "firstResultMs": 12875,
+  "intellisenseReadyMs": 18623,
+  "mbToFirstResult": 9.89,
+  "mbTotal": 13.93,
+  "warmFirstResultMs": 951
+ },
+ {
+  "mode": "B  plain files, Pages gzips them (if it does)",
+  "profile": "cable 25 Mbit/s, 20 ms",
+  "firstResultMs": 5807,
+  "intellisenseReadyMs": 9004,
+  "mbToFirstResult": 12.46,
+  "mbTotal": 17.63,
+  "warmFirstResultMs": 1165
+ },
+ {
+  "mode": "B  plain files, Pages gzips them (if it does)",
+  "profile": "mobile 8 Mbit/s, 60 ms",
+  "firstResultMs": 15584,
+  "intellisenseReadyMs": 22470,
+  "mbToFirstResult": 12.46,
+  "mbTotal": 17.63,
+  "warmFirstResultMs": 1139
+ },
+ {
+  "mode": "C  plain files, no compression of wasm/dll/bin",
+  "profile": "cable 25 Mbit/s, 20 ms",
+  "firstResultMs": 12699,
+  "intellisenseReadyMs": 18757,
+  "mbToFirstResult": 32.99,
+  "mbTotal": 46.81,
+  "warmFirstResultMs": 3118
+ },
+ {
+  "mode": "C  plain files, no compression of wasm/dll/bin",
+  "profile": "mobile 8 Mbit/s, 60 ms",
+  "firstResultMs": 37127,
+  "intellisenseReadyMs": 53114,
+  "mbToFirstResult": 32.98,
+  "mbTotal": 46.81,
+  "warmFirstResultMs": 7660
+ }
+]

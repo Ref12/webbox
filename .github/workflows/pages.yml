@@ -1,6 +1,8 @@
 name: Deploy to GitHub Pages
 
-# Every app in this repository is static: each folder is published as it is, no build step.
+# Every app in this repository is static: each folder is published as it is, no build step,
+# except csharp/ (C# REPL on .NET WebAssembly): its source is not copied; it is built (reference-assembly prep + dotnet publish)
+# and tools/stage.mjs puts the result at _site/csharp/.
 # hexad's remote app lives in the hexad repository (web/remote) and is published here at /hexad/.
 on:
   push:
@@ -34,12 +36,29 @@ jobs:
           sparse-checkout: web/remote
           sparse-checkout-cone-mode: false
       - uses: actions/configure-pages@v5
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build the C# REPL
+        working-directory: csharp
+        run: |
+          dotnet --info | head -5
+          # restores Microsoft.NETCore.App.Ref (the reference assemblies PrepareRefs.cs packs) into the NuGet cache
+          dotnet restore tests/CsRepl.Tests
+          dotnet run tools/PrepareRefs.cs
+          dotnet run tools/PrepareLazy.cs
+          dotnet publish src/CsRepl.Wasm -c Release -o dist
       - name: Stage the site
         run: |
           mkdir -p _site
-          rsync -a --exclude '.git' --exclude '.github' --exclude '_site' --exclude '_hexad' --exclude 'README.md' ./ _site/
+          rsync -a --exclude '.git' --exclude '.github' --exclude '_site' --exclude '_hexad' --exclude '/csharp' --exclude 'README.md' ./ _site/
           mkdir -p _site/hexad
           rsync -a --delete --exclude 'README.md' _hexad/web/remote/ _site/hexad/
+          # csharp/ -> _site/csharp/: app files with content-hashed names, big binaries only as .br (decoded in the page; Pages cannot send Content-Encoding for them)
+          node csharp/tools/stage.mjs csharp/dist/wwwroot _site/csharp
           touch _site/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:

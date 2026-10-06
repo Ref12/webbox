@@ -1,6 +1,6 @@
 # webbox
 
-Playground for web apps. Each app lives in its own folder and is published as it is, with no build step,
+Playground for web apps. Each app lives in its own folder and is published as it is, with no build step (the one exception is `csharp/`, which is built by the workflow),
 to GitHub Pages at https://ref12labs.github.io/webbox/ by the workflow in `.github/workflows/pages.yml` on every
 push to `main`.
 
@@ -11,5 +11,6 @@ push to `main`.
 | Speech keep-alive | `/speech-test/` | Installable test page for hands-free speech on a phone: browser voice, `<audio>` + Media Session, voice + silent loop, voice + Wake Lock, Web Audio and microphone (SpeechRecognition, getUserMedia level meter), with a persistent timestamped log and a "what happened while hidden" summary, to show what survives screen-off, in a tab vs installed. |
 | Key Vault | `/keyvault/` | Browse and edit Azure Key Vault secrets in one window: MSAL sign-in, subscription and vault picker with recent vaults, inline show / copy / edit / new secret. Lists and writes through ARM; device-code sign-in and reading values go through the generic CORS proxy Worker in `workers/cors-proxy/`. Setup in `keyvault/README.md`; `?mock=1` runs it on fake data. |
 | CORS proxy | `/workers/cors-proxy/` (not a page) | A generic Cloudflare Worker (`worker.js`, `wrangler.toml`, README) that routes `<proxy>/<host>/<path>` to `https://<host>/<path>` and adds CORS headers, with a host allowlist, origin list and optional shared key. Deployed by hand with `wrangler deploy`; used by Key Vault. |
+| C# interactive | `/csharp/` (source: `csharp/`) | A C# REPL with Roslyn IntelliSense that compiles and runs in the browser on .NET 10 WebAssembly; `#r "nuget: Pkg, ver"`, `#help`, `#clear`, `#reset`, `#load "url"`. **Not published as is:** the workflow builds it (`dotnet publish` + `csharp/tools/stage.mjs`) and puts the result at `_site/csharp/`. See `csharp/README.md` for the design, the Pages delivery (brotli decoded in the page, content-hashed names) and the tests. |
 
 Line endings are left alone (`.gitattributes` has `* -text`).
