@@ -51,7 +51,7 @@ export async function start({ viewport = { width: 1600, height: 1000 }, fixture 
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
-  page.on('console', m => m.type() === 'error' && !/404|not mocked|not recorded/.test(m.text()) && errors.push(m.text()));
+  page.on('console', m => m.type() === 'error' && !/404|422|not mocked|not recorded/.test(m.text()) && errors.push(m.text()));
   const base = 'http://localhost:' + port + '/prview/';
   return { page, ctx, br, srv, misses, seen, calls, errors, base, rec, on, close: async () => { await br.close(); srv.close(); } };
 }

@@ -580,6 +580,7 @@ function wireFiles() {
   $('#tree').addEventListener('scroll', renderTreeSoon, { passive: true });
   $('#tree').addEventListener('click', onTreeClick);
   $('#diff').addEventListener('click', onDiffClick);
+  for (const ev of ['wheel', 'touchstart', 'mousedown', 'keydown']) $('#diff').addEventListener(ev, () => { if (S) S.pin = null; }, { passive: true });
   $('#diff').addEventListener('input', onDiffInput);
   $('#diff').addEventListener('keydown', onDiffKey);
   $('#diff').addEventListener('mouseover', onDiffOver);
@@ -787,6 +788,10 @@ function relayout(keepAnchor) {
   sp.style.height = S.tops[S.items.length] + 'px';
   sp.style.minWidth = S.contentW ? Math.ceil(S.contentW) + 'px' : '';
   if (anchor && S.itemIndex.has(anchor.key)) el.scrollTop = S.tops[S.itemIndex.get(anchor.key)] - anchor.off;
+  if (S.pin && S.view === 'all') {
+    const i = S.itemIndex.get('h:' + S.pin), pf = S.fl.find(f => f.filename === S.pin);
+    if (i !== undefined) { el.scrollTop = S.tops[i]; if (pf && pf.st.status !== 'idle' && pf.st.status !== 'loading' && Math.abs(el.scrollTop - S.tops[i]) < 2) S.pin = null; }
+  }
   S.winKey = null;
   el.dataset.state = S.items.length ? 'ready' : 'empty';
   renderDiff();
@@ -992,6 +997,7 @@ function scrollToFile(path, instant) {
     const i = S.itemIndex.get('h:' + path);
     if (i === undefined) { S.filter = ''; const fi = $('#filter'); if (fi) fi.value = ''; refreshTree(); relayout(false); return scrollToFile(path, instant); }
     el.scrollTop = S.tops[i];
+    S.pin = path; setTimeout(() => { if (S && S.pin === path) S.pin = null; }, 6000);   // hold the file at the top while content above/below it is still loading
   }
   S.winKey = null; renderDiff();
 }

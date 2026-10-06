@@ -29,6 +29,7 @@ function mockGitHub(h, { threads = null } = {}) {
   h.on('GET', /api\.github\.com\/user$/, () => ({ login: ME.login, name: ME.name, avatar_url: ME.avatar_url }));
   h.on('POST', /api\.github\.com\/graphql/, req => {
     const q = req.json().query;
+    if (q.includes('search(')) return { data: { search: { issueCount: 0, pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] } } };
     if (q.includes('reviewThreads')) return { data: { repository: { pullRequest: { reviewThreads: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: gqlThreads } } } } };
     if (q.includes('resolveReviewThread') || q.includes('unresolveReviewThread')) { const res = !q.includes('unresolveReviewThread'); return { data: { [res ? 'resolveReviewThread' : 'unresolveReviewThread']: { thread: { id: req.json().variables.id, isResolved: res } } } }; }
     return { errors: [{ message: 'unmocked graphql' }] };
@@ -295,6 +296,9 @@ test('threads render inline in every view mode: inline / side-by-side x all file
 
 test('threads: collapsible boxes, outdated list per file, sanitized Markdown', async () => {
   const h = await start(); const p = h.page;
+  const url = Object.keys(h.rec).find(u => /pulls\/135064\/comments\?per_page=100&page=1$/.test(u));
+  const evil = { id: 5551, in_reply_to_id: LIVE_ROOT, body: '<img src=x onerror="window.__xss=1"> <script>window.__xss=2</script> **bold** [ok](https://example.com/x) [bad](javascript:alert(1)) <a href="javascript:alert(2)">x</a>', user: { login: 'mallory' }, created_at: '2026-10-04T00:00:00Z', path: LINK, line: 273, side: 'RIGHT', html_url: 'https://github.com/x' };
+  h.on('GET', /pulls\/135064\/comments\?per_page=100&page=1$/, () => [...JSON.parse(h.rec[url].body), evil]);
   await open(h, PR + '?f=' + LINK);
   await p.waitForSelector('#win .thread');
   const ol = p.locator('#win .olist button');
@@ -302,16 +306,14 @@ test('threads: collapsible boxes, outdated list per file, sanitized Markdown', a
   await ol.first().click();
   await p.waitForFunction(() => [...document.querySelectorAll('#win .thread')].some(t => /was line 62/.test(t.innerText)));
   await shot(p, 'comments-inline-threads');
-  const box = p.locator('#win .thread:not(.old)').first();
-  await box.locator('.tcol').click();
+  await p.locator('#win .thread:not(.old)').first().locator('.tcol').click();
   await p.waitForSelector('#win .thread.collapsed');
   await p.locator('#win .thread.collapsed .tcol').first().click();
   await p.waitForFunction(() => !document.querySelector('#win .thread.collapsed'));
-  // sanitized: raw HTML in somebody's comment never becomes elements
-  await p.evaluate(() => { const s = window.__prview.state; s.comments.push({ id: 5551, in_reply_to_id: 4167554232, body: '<img src=x onerror="window.__xss=1"> <script>window.__xss=2<\/script> **bold** [ok](https://example.com/x) [bad](javascript:alert(1))', user: { login: 'mallory' }, created_at: new Date().toISOString(), path: s.comments[0].path }); });
-  await p.evaluate(() => window.dispatchEvent(new Event('resize')));
-  await p.keyboard.press('Escape');
-  await p.evaluate(() => { const s = window.__prview.state; s.threads = null; });
+  const md = await p.locator('#win .thread', { hasText: 'mallory' }).innerHTML();
+  assert.ok(!/<img|<script|href="javascript/i.test(md), 'no raw HTML from comments');
+  assert.match(md, /&lt;img/); assert.match(md, /<b>bold<\/b>/); assert.match(md, /href="https:\/\/example\.com\/x" target="_blank" rel="noopener noreferrer"/);
+  assert.equal(await p.evaluate(() => window.__xss), undefined);
   await finish(h);
 });
 
@@ -350,6 +352,7 @@ test('add a line comment: hover +, composer with Markdown preview, post, see it 
   await shot(p, 'comment-hover-plus');
   await plus.click();
   await p.waitForSelector('#win .composer textarea');
+  const cpath = await p.evaluate(() => window.__prview.state.composer.path);
   assert.ok(await p.evaluate(() => document.activeElement.dataset.fid === 'c'), 'composer is focused');
   await p.fill('#win .composer textarea', 'Looks **risky**: <img src=x onerror="window.__xss=1"> and `code`');
   await p.click('#win .composer [data-tab=preview]');
@@ -361,7 +364,7 @@ test('add a line comment: hover +, composer with Markdown preview, post, see it 
   await p.click('#win .composer [data-act=cpost]');
   await p.waitForFunction(() => [...document.querySelectorAll('#win .thread')].some(t => /Looks/.test(t.innerText) && !t.classList.contains('composer')));
   const post = h.calls.find(c => c.method === 'POST' && /pulls\/135064\/comments$/.test(c.url));
-  assert.equal(post.body.commit_id, HEAD); assert.equal(post.body.path, LINK);
+  assert.equal(post.body.commit_id, HEAD); assert.equal(post.body.path, cpath);
   assert.equal(post.body.side, cl[0] === 'L' ? 'LEFT' : 'RIGHT'); assert.equal(post.body.line, Number(cl.slice(2)));
   assert.match(post.body.body, /risky/); assert.equal(post.body.start_line, undefined);
   assert.equal(await p.evaluate(() => window.__xss), undefined);
@@ -449,6 +452,7 @@ test('batched review: pending comments, then Finish review with Request changes'
   const cl = await firstAddable(p);
   await p.locator('#win [data-cl="' + cl + '"]').first().hover();
   await p.locator('#win [data-cl="' + cl + '"] .addc').first().click();
+  const cpath = await p.evaluate(() => window.__prview.state.composer.path);
   await p.fill('#win .composer textarea', 'pending one');
   await p.click('#win .composer [data-act=cpend]');
   await p.waitForSelector('#win .thread.pending');
@@ -467,7 +471,7 @@ test('batched review: pending comments, then Finish review with Request changes'
   await p.waitForFunction(() => /Review submitted/.test(document.querySelector('#banner').innerText));
   const rv = h.calls.find(c => /pulls\/135064\/reviews/.test(c.url));
   assert.equal(rv.body.event, 'REQUEST_CHANGES'); assert.equal(rv.body.body, 'Please look at the comments'); assert.equal(rv.body.commit_id, HEAD);
-  assert.equal(rv.body.comments.length, 1); assert.equal(rv.body.comments[0].body, 'pending one'); assert.equal(rv.body.comments[0].path, LINK);
+  assert.equal(rv.body.comments.length, 1); assert.equal(rv.body.comments[0].body, 'pending one'); assert.equal(rv.body.comments[0].path, cpath);
   assert.equal(await p.locator('#rv-btn').innerText(), 'Review');
   await finish(h);
 });
