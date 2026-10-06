@@ -105,7 +105,10 @@ async function route() {
   if (S && S.key === ref.owner + '/' + ref.repo + '#' + ref.number) {
     S.tab = tab; S.hashSet = null;
     if (params.m) ui.mode = params.m === 'split' ? 'split' : 'inline';
+    const wantView = params.v === 'all' || params.v === 'one' ? params.v : defaultView();
+    const viewChanged = S.view !== wantView; S.view = wantView;
     renderPage();
+    if (viewChanged && S.rangeReady) { relayout(false); if (S.view === 'all') scrollToFile(S.selected, true); updateToolbar(); }
     if (S.rangeReady && (params.c || '') !== S.cparam) await applyRange(params.c || '');
     if (S.rangeReady && params.f && S.tab === 'files' && S.fl.some(f => f.filename === params.f)) selectFile(params.f);
     return;

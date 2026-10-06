@@ -1,36 +1,22 @@
 # PR viewer
 
-Review a GitHub pull request the way Azure DevOps shows it, and **comment on it**: inline threads, replies, resolve, batched reviews. Static page, no build, no server: the browser talks to the GitHub API directly (and, for sign-in only, to your CORS proxy Worker).
+Review a GitHub pull request the way Azure DevOps shows it, and **comment on it**: inline threads, replies, resolve, batched reviews. Static page, no build, no server: the browser talks to the GitHub API directly.
 
-## One-time setup for sign-in (two things you do by hand)
+## Signing in = adding a GitHub token
 
-Signing in uses GitHub's **OAuth device flow** (the page shows a code, you enter it at github.com/login/device). It needs two things from you; without them the viewer still works read-only for public repos, and a pasted token still works.
+There is no OAuth and no proxy: the page talks only to api.github.com and raw.githubusercontent.com. Without a token it works read-only for public repositories (60 API requests/hour per IP). To **comment, review, open private repositories** and get **5,000/hour**, click **Sign in** (or the dimmed **+** in the gutter, or ⚙ Settings) and paste a personal access token:
 
-**1. Create a GitHub OAuth App (about a minute; the client id is public, not a secret)**
+1. Open https://github.com/settings/personal-access-tokens/new (fine-grained token).
+2. Name and expiry; **Repository access**: the repositories you review (or all).
+3. **Repository permissions: Pull requests = Read and write, Contents = Read-only.**
+4. **Generate token**, copy `github_pat_…`, paste it in the dialog, **Save token**.
 
-1. GitHub → your avatar → **Settings → Developer settings → OAuth Apps → New OAuth App** (https://github.com/settings/applications/new).
-2. **Application name:** `PR viewer` (anything).
-3. **Homepage URL:** where you open the viewer, e.g. `https://webbox.ref12cf.workers.dev/prview/`.
-4. **Authorization callback URL:** the same address. Device flow never uses it, but the form requires one.
-5. Tick **Enable Device Flow**, then **Register application**.
-6. Copy the **Client ID** (`Ov23li…`). No client secret is needed or used.
-7. Open the viewer → **Sign in** → paste the Client ID (first-run screen; also in ⚙ Settings) → pick the access → **Save and sign in**.
-
-Access (scope): **`repo`** (default: private repositories, and commenting on them) or **`public_repo`** (lighter: public repositories only). It can be changed in Settings; sign in again for it to take effect.
-
-**2. Redeploy the CORS proxy Worker** (`workers/cors-proxy/`, the one Key Vault already uses). github.com's two device-flow endpoints send no CORS headers, so the page calls `<proxy>/github.com/login/device/code` and `<proxy>/github.com/login/oauth/access_token`. I changed the Worker (code and `wrangler.toml`; its tests pass):
-
-* **`ALLOWED_HOSTS` now also lists `github.com/login/device/code` and `github.com/login/oauth/access_token`.** An entry with a path allows exactly that path, so the rest of github.com stays blocked (new feature of the allowlist).
-* **`ALLOWED_ORIGINS` now also lists `https://webbox.ref12cf.workers.dev`**. The old default only had `ref12labs.github.io` and localhost, so the Worker-hosted site would have been refused.
-
-Deploy by hand: `cd workers/cors-proxy && npx wrangler deploy`. If your deployed copy overrides these variables in the dashboard, add the same entries there. The default proxy URL in the viewer is `https://cors-proxy.ref12cf.workers.dev` (⚙ Settings → OAuth App → CORS proxy URL to change it). If a proxy refuses, the sign-in dialog says which entry is missing.
-
-Everything else goes straight from the browser to api.github.com (which allows CORS): the token is kept in this browser's `localStorage` (`prview.token`), sent only to api.github.com, never to the proxy except in the device-flow requests (client id and device code, no token). Sign-out removes it. The proxy sees only the device-flow traffic.
+A **classic** token also works: `public_repo` (public repositories) or `repo` (private ones too). The token is checked against `GET /user`; the avatar and login then show top right. It is kept only in this browser's `localStorage` (`prview.token`), sent only to api.github.com, and removed by **Sign out** (avatar menu or ⚙ Settings).
 
 ## Using it
 
 * Open `prview/#/<owner>/<repo>/pull/<n>` or paste a github.com PR URL into the box (`https://github.com/o/r/pull/5/files`, `o/r#5`, and this page's own links all work).
-* **Signed out:** public repositories only, 60 API requests/hour per IP (the header shows "API 55/60"). **Signed in** (avatar and login top right, **Sign out** in its menu): private repositories, commenting, **5,000/hour**. **Paste a token** instead is still in ⚙ Settings (classic `repo`/`public_repo`, or fine-grained with Pull requests and Contents, read and write).
+* **Signed out:** public repositories only, 60 API requests/hour per IP (the header shows "API 55/60"). **Signed in with a token** (avatar and login top right, **Sign out** in its menu): private repositories, commenting, **5,000/hour**.
 
 ### Home: lists of PRs (`prview/#/`)
 
@@ -42,16 +28,18 @@ Everything else goes straight from the browser to api.github.com (which allows C
 ### The diff
 
 * **Data.** PR, files, commits, review comments, and the merge base (compare call); file contents of both versions come from raw.githubusercontent.com for anonymous use (no API quota) or the contents API when signed in; they load lazily as files scroll into view. The diff is computed in the browser (Myers, `lib/diff.js`), so unchanged regions can be shown in full and expanded (↑20 / ↓20 / all), with word-level marks.
-* **Layout.** Left: file tree (folders joined, A/M/D/R badges, +/− counts, filter). Right: all files stacked or one at a time; inline or side-by-side; per-file collapse; sticky file header; **Reviewed** per file (localStorage, per PR and head SHA); **View** = the whole file; syntax highlighting. Commit picker: *All changes*, one commit, or a range (Shift-click). Tabs: Files, Overview, Commits.
+* **One file at a time is the default**, on desktop and phone: the selected file fills the diff pane (opening a PR shows the first file, or the `f=` file). Next / previous file: `j` / `k`, the **‹ n / N ›** buttons in the toolbar, a **horizontal swipe** on the phone, or pick one in the tree (the drawer on a phone). **⚙ Settings → All files stacked** (desktop and phone) switches to the stacked view; it is remembered in `localStorage` (`prview.view`). `a` toggles for the session.
+* **Layout.** Left: file tree (folders joined, A/M/D/R badges, +/− counts, filter). Right: one file (or, by setting, all stacked); inline or side-by-side; per-file collapse; sticky file header; **Reviewed** per file (localStorage, per PR and head SHA); **View** = the whole file; syntax highlighting. Commit picker: *All changes*, one commit, or a range (Shift-click). Tabs: Files, Overview, Commits.
 * **Long lines.** Inline scrolls sideways. Side-by-side **wraps long lines inside their own pane** (rows get taller), so nothing is clipped and there is no sideways scroll.
-* **URL state.** `#/o/r/pull/5?f=<file>&c=<sha7>[..<sha7>]&m=split&v=one&x=1`. Changing `c=` or `f=` in the address bar while that PR is open applies it **without reloading the PR**; opening a link with `f=` scrolls to that file and holds it there while the files around it load.
-* **Big PRs.** Tree and diff pane are virtualized; files fetch when near the viewport (4 at a time); binary/generated/huge files are skipped with a **Load anyway** link. **Phone** (≤ 800 px): the tree is a drawer (☰ or `t`).
+* **URL state.** `#/o/r/pull/5?f=<file>&c=<sha7>[..<sha7>]&m=split&v=all&x=1` (`v=one` is the default and is left out unless the stacked setting is on; `v=all` stacks, `v=one` forces one file). Changing `c=` or `f=` in the address bar while that PR is open applies it **without reloading the PR**; opening a link with `f=` shows that file (stacked: scrolls to it and holds it there while the files around it load).
+* **Big PRs.** Tree and diff pane are virtualized; files fetch when near the viewport (4 at a time); binary/generated/huge files are skipped with a **Load anyway** link. **Phone** (≤ 800 px): the tree is a drawer, opened by the **file-explorer icon** (a folder with two items on tree lines, an inline SVG in `currentColor`) or `t`.
 
 ### Comments
 
 * **Threads are boxes between the lines** they refer to, in every mode (inline, side-by-side, all files stacked, one file, full files): status pill (Active / Resolved / Pending / Outdated), collapse chevron, every comment with avatar, login, time and a link to GitHub, a **reply** box, **Resolve / Unresolve**. Resolved threads start collapsed. Multi-line threads sit under their last line.
 * **Outdated** comments (their lines are no longer in the diff) are in a collapsible **Outdated comments (n)** list at the top of each file.
-* **Comments panel** (💬 in the toolbar, or `m`): every thread, grouped by file, filter *All / Active / Resolved / Outdated / Pending*, click to jump (it switches to *All changes* if needed, opens the file and the box, and flashes it).
+* **Comments panel** (💬 in the toolbar, or `m`): every thread, grouped by file, filter *All / Active / Resolved / Outdated / Pending*, click to jump (it switches to *All changes* if needed, shows the file, scrolls to the line and opens the box, and flashes it; works in one-file mode too).
+* **Signed out** the comment points are still visible: a dimmed **+** in the gutter (tooltip / tap: *Add a GitHub token to comment*) and an *Add a GitHub token to reply* button in threads; both open the token dialog.
 * **Add a comment** (signed in, *All changes* selected): hover a line, click the **+** in the gutter (or press `c`). **Shift-click** another + or **drag** from one + to another for several lines. An inline composer opens between the lines: **Write / Preview** (Markdown), **± Suggest** (quotes the lines as a `suggestion` block), **Comment** (posts now: `POST /repos/{o}/{r}/pulls/{n}/comments` with `commit_id`, `path`, `line`, `side`, `start_line`/`start_side`), **Add to review** (kept as *pending*), Ctrl+Enter posts, Esc cancels. Only lines inside the diff hunks get a + (GitHub refuses the others); GitHub's error is shown in the box and your text is kept.
 * **Batched review.** Pending comments (stored in localStorage per PR and head SHA, so they survive a reload) show in their place with a dashed border, editable and deletable. **Finish review (n)** asks for a summary and **Comment / Approve / Request changes** and sends one `POST …/pulls/{n}/reviews` with all comments. The same button, labelled **Review**, approves or requests changes with no pending comments.
 * **Reply** posts `…/comments/{id}/replies`. **Resolve/Unresolve** uses GraphQL `resolveReviewThread` / `unresolveReviewThread` (the thread ids and resolved states come from one `reviewThreads` query when signed in; signed out threads are read-only and show no Resolve).
@@ -64,15 +52,15 @@ Everything else goes straight from the browser to api.github.com (which allows C
 | --- | --- |
 | `j` / `k` | next / previous file |
 | `n` / `p` | next / previous change (moves on to the next file at the end) |
-| `c` | **comment on the line under the pointer** (or the first changed line in view); signed out: opens sign-in |
+| `c` | **comment on the line under the pointer** (or the first changed line in view); signed out: opens the token dialog |
 | `m` | comments panel |
 | `r` | mark the current file reviewed |
 | `x` | collapse / expand the current file (was `c` in v1) |
 | `s` | inline ⇄ side-by-side |
 | `f` | changes only ⇄ full files |
-| `a` | all files stacked ⇄ one file |
+| `a` | one file ⇄ all files stacked (the setting is in ⚙ Settings) |
 | `/` | filter files |
-| `t` | show / hide the tree (phone) |
+| `t` | show / hide the tree (phone drawer) |
 | `?` | help |
 | in a comment box | `Ctrl+Enter` post, `Esc` cancel |
 
@@ -85,8 +73,8 @@ Everything else goes straight from the browser to api.github.com (which allows C
 | `lib/tree.js` | file tree building, flattening for the virtual list |
 | `lib/url.js` | PR URL and route parsing |
 | `lib/github.js` | REST + GraphQL client, rate-limit and write errors, search/list queries, binary/generated detection |
-| `lib/auth.js` | OAuth device flow (through the proxy), settings, stored token and user |
-| `lib/signin.js` | the sign-in (first-run) and settings dialogs |
+| `lib/auth.js` | the stored token and user (localStorage) |
+| `lib/signin.js` | the add-a-token and settings dialogs |
 | `lib/home.js` | the PR lists |
 | `lib/threads.js` | grouping comments into threads, hunks (where a + may appear), pending comments |
 | `lib/highlight.js` | small lazy syntax highlighter |
@@ -99,12 +87,11 @@ Everything else goes straight from the browser to api.github.com (which allows C
 
 ```
 cd prview/tests && npm install
-node --test unit.test.mjs unit-v2.test.mjs   # diff, tree, URL, highlighter; device flow, threads, API request shapes, lists, Markdown safety
-node --test e2e.test.mjs e2e-v2.test.mjs     # headless Chromium (/usr/bin/chromium) against tests/fixtures/*.json, no network
+node --test unit.test.mjs unit-v2.test.mjs   # diff, tree, URL, highlighter; token session, threads, API request shapes, lists, Markdown safety
+node --test e2e.test.mjs e2e-v2.test.mjs e2e-v3.test.mjs     # headless Chromium (/usr/bin/chromium) against tests/fixtures/*.json, no network
 node smoke.mjs                               # LIVE, read-only, anonymous: opens dotnet/runtime#135064 and lists dotnet/runtime PRs (a handful of API requests)
 node record-fixture.mjs o/r#n                # re-record a fixture from the live API
-node --test ../../workers/cors-proxy/test.mjs
 ```
 
-The e2e fixture is a recording of the real API responses for dotnet/runtime#135064 (6 files, 3 commits, a multi-line live thread, a three-comment thread and an outdated one; resolved state comes from the mocked GraphQL answer); any unrecorded request fails the test. `e2e-v2` adds mocks (`harness.mjs`: `h.on(method, regex, fn)`) for everything that writes or needs a login: the device flow through a mocked proxy, `/user`, GraphQL (review threads, resolve, PR search), the comment / reply / review POSTs. **No test posts to GitHub**; the live smoke never signs in.
+The e2e fixture is a recording of the real API responses for dotnet/runtime#135064 (6 files, 3 commits, a multi-line live thread, a three-comment thread and an outdated one; resolved state comes from the mocked GraphQL answer); any unrecorded request fails the test. `e2e-v3` covers the one-file default, the stacked setting, file navigation, the phone drawer and tree icon, and the signed-out comment hint. (Most older tests seed `prview.view="all"` through the harness; `start({ view: null })` gives the real default.) `e2e-v2` adds mocks (`harness.mjs`: `h.on(method, regex, fn)`) for everything that writes or needs a login: `/user` (token sign-in), GraphQL (review threads, resolve, PR search), the comment / reply / review POSTs. **No test posts to GitHub**; the live smoke never signs in.
 No GitHub Pages change is needed: every folder is published as it is.

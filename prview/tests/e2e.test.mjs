@@ -219,14 +219,12 @@ test('rate limit is explained', async () => {
   await p.goto(h.base + PR);
   await p.waitForSelector('#banner:not([hidden])');
   const t = await p.locator('#banner').innerText();
-  assert.match(t, /Rate limit reached/); assert.match(t, /60 requests per hour/); assert.match(t, /Sign in/);
+  assert.match(t, /Rate limit reached/); assert.match(t, /60 requests per hour/); assert.match(t, /Add a token/);
   await shot(p, 'rate-limit');
   await p.click('#banner [data-act=signin]');
-  await p.waitForSelector('#si-paste');
-  await p.click('#si-paste');
-  await p.locator('#dlg summary', { hasText: 'Paste a token' }).click();
+  await p.waitForSelector('#tok');
   await p.fill('#tok', 'ghp_test_token');
-  await p.click('#st-save');
+  await p.click('#tok-save');
   await p.waitForFunction(() => localStorage.getItem('prview.token') === 'ghp_test_token');
   await h.close();
 });
