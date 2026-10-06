@@ -57,6 +57,13 @@ jobs:
           dotnet publish src/CsRepl.Wasm -c Release -o dist
           # experimental multithreaded runtime, only reachable with ?threads=1
           dotnet publish src/CsRepl.Wasm -c Release -p:Threads=true -p:IntermediateOutputPath=obj/mt/ -o dist-mt
+      # --- fuget (NuGet package browser, .NET WebAssembly): built, not copied. Self-contained block so it merges cleanly with the csharp/ one. ---
+      - name: Build fuget
+        working-directory: fuget
+        run: |
+          dotnet run tools/PrepareRefs.cs        # reference pack -> wwwroot/ref (decompiler references, on demand)
+          dotnet publish src/Fuget.Wasm -c Release -o dist
+      # --- end fuget ---
       - name: Stage the site
         run: |
           mkdir -p _site
@@ -65,6 +72,8 @@ jobs:
           rsync -a --delete --exclude 'README.md' _hexad/web/remote/ _site/hexad/
           # csharp/ -> _site/csharp/: app files with content-hashed names, big binaries only as .br (decoded in the page; Pages cannot send Content-Encoding for them)
           node csharp/tools/stage.mjs csharp/dist/wwwroot _site/csharp --target=pages
+          # fuget: publish output replaces the copied sources
+          rm -rf _site/fuget && mkdir -p _site/fuget && cp -r fuget/dist/wwwroot/. _site/fuget/
           touch _site/.nojekyll
       - name: Stage the Cloudflare site
         run: |
@@ -73,6 +82,7 @@ jobs:
           mkdir -p _cf_site/hexad
           rsync -a --delete --exclude 'README.md' _hexad/web/remote/ _cf_site/hexad/
           node csharp/tools/stage.mjs csharp/dist/wwwroot _cf_site/csharp --target=cloudflare --mt=csharp/dist-mt/wwwroot
+          rm -rf _cf_site/fuget && mkdir -p _cf_site/fuget && cp -r fuget/dist/wwwroot/. _cf_site/fuget/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

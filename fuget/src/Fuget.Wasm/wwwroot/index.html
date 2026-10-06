@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>fuget — NuGet package browser on .NET WebAssembly</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Browse NuGet packages: types, members, XML docs, decompiled C#, dependencies and API diffs, entirely in your browser.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%234fc1ff'/%3E%3Ctext x='3' y='12' font-size='11' font-family='monospace' fill='%23111'%3Ef%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header>
+  <button id="menu" class="icon" aria-label="Toggle tree">&#9776;</button>
+  <a class="brand" href="#/"><strong>fuget</strong><span class="dim"> .NET on WebAssembly</span></a>
+  <div class="search">
+    <input id="q" type="search" placeholder="Search NuGet packages…" autocomplete="off" aria-label="Search packages" spellcheck="false">
+    <div id="suggest" class="suggest" hidden></div>
+  </div>
+  <select id="version" aria-label="Version" hidden></select>
+  <span id="status" class="status">loading&hellip;</span>
+</header>
+<div id="layout">
+  <nav id="tree" aria-label="Package tree"></nav>
+  <main>
+    <div id="crumbs" class="crumbs"></div>
+    <div id="tabs" class="tabs" role="tablist"></div>
+    <section id="panel" aria-live="polite"><p class="busy">Loading&hellip;</p></section>
+  </main>
+</div>
+<script type="module" src="main.js"></script>
+</body>
+</html>
