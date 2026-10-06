@@ -119,24 +119,45 @@ jobs:
           dotnet run tools/PrepareLazy.cs        # IntelliSense assemblies -> wwwroot/lazy (shared/Intellisense, fetched after first paint)
           dotnet publish src/SharpLab.Wasm -c Release -o dist
       # --- ILSpy in the browser (Avalonia, .NET WebAssembly): built from a pinned commit of the fork ljcollins25/ILSpy (branch browser), not copied ---
+      # The output is cached by the pinned commit: it rebuilds only when the pin changes (bump ILSPY_REF), not on every deploy.
+      - name: Cache the ILSpy build
+        id: ilspy-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            _ilspy_pages
+            _ilspy_cf
+            _ilspy_headers
+          key: ilspy-v1-f83873649e14fba7034f0cc0447069b7366445d5
       - name: Check out ILSpy
+        if: steps.ilspy-cache.outputs.cache-hit != 'true'
         uses: actions/checkout@v4
         with:
           repository: ljcollins25/ILSpy
           ref: f83873649e14fba7034f0cc0447069b7366445d5
           path: ilspy-src
       - name: Build ILSpy
+        if: steps.ilspy-cache.outputs.cache-hit != 'true'
         run: |
           ilspy-src/ILSpy.Browser/build-static.sh "$PWD/_ilspy_pages" --target=pages
           ilspy-src/ILSpy.Browser/build-static.sh "$PWD/_ilspy_cf" --target=cloudflare --base=/ilspy --headers="$PWD/_ilspy_headers"
       # --- Roslyn Quoter (browser-only, .NET WebAssembly): built from a pinned commit of the fork ljcollins25/RoslynQuoter (branch browser), not copied ---
+      # Cached by the pinned commit and webbox's shared build files (it builds with build/NoWorkloadWasm.*).
+      - name: Cache the Roslyn Quoter build
+        id: quoter-cache
+        uses: actions/cache@v4
+        with:
+          path: quoter-dist
+          key: quoter-v1-5c3566265e4a401a1c31864350b48562edd373ef-${{ hashFiles('build/NoWorkloadWasm.props', 'build/NoWorkloadWasm.targets') }}
       - name: Check out the Roslyn Quoter
+        if: steps.quoter-cache.outputs.cache-hit != 'true'
         uses: actions/checkout@v4
         with:
           repository: ljcollins25/RoslynQuoter
           ref: 5c3566265e4a401a1c31864350b48562edd373ef
           path: quoter-src
       - name: Build the Roslyn Quoter
+        if: steps.quoter-cache.outputs.cache-hit != 'true'
         run: WEBBOX_DIR="$PWD" quoter-src/src/Quoter.Browser/build-static.sh "$PWD/quoter-dist"
       - name: Stage the site
         run: |
