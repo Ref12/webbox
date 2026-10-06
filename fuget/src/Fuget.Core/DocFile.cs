@@ -115,7 +115,7 @@ public sealed class DocFile
                         sb.Append('`').Append(label).Append('`'); break;
                     case "paramref": case "typeparamref": sb.Append('`').Append((string?)el.Attribute("name")).Append('`'); break;
                     case "c": sb.Append('`'); foreach (var c in el.Nodes()) Walk(c, sb); sb.Append('`'); break;
-                    case "code": sb.Append("\n\n").Append("```\n").Append(el.Value.Trim('\r', '\n').TrimEnd()).Append("\n```\n\n"); break;
+                    case "code": if (el.Value.Trim().Length == 0) break; sb.Append("\n\n").Append("```\n").Append(el.Value.Trim('\r', '\n').TrimEnd()).Append("\n```\n\n"); break;
                     case "para": sb.Append("\n\n"); foreach (var c in el.Nodes()) Walk(c, sb); sb.Append("\n\n"); break;
                     case "br": sb.Append('\n'); break;
                     case "list":

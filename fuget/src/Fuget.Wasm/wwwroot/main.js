@@ -388,7 +388,7 @@ async function typePage(type, seq) {
   if (stale(seq)) return null;
   const root = h('div', { class: 'typepage' });
   root.append(h('h2', {}, h('span', { class: 'ico big ' + type.kind, text: KIND_ICON[type.kind] }), type.name, ' ', badge(type.kind)), h('div', { class: 'dim ns', text: type.namespace }));
-  root.append(obsoleteBanner(type), sigBlock((type.attributes.length ? type.attributes.map((a) => '[' + a + ']').join('\n') + '\n' : '') + type.declaration));
+  root.append(...[obsoleteBanner(type)].filter(Boolean), sigBlock((type.attributes.length ? type.attributes.map((a) => '[' + a + ']').join('\n') + '\n' : '') + type.declaration));
   for (const s of docSections(doc)) root.append(s);
   const members = type.members;
   if (type.kind === 'enum') {

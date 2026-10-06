@@ -34,12 +34,24 @@ jobs:
           sparse-checkout: web/remote
           sparse-checkout-cone-mode: false
       - uses: actions/configure-pages@v5
+      # --- fuget (NuGet package browser, .NET WebAssembly): built, not copied. Self-contained block so it merges cleanly with the csharp/ one. ---
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Build fuget
+        working-directory: fuget
+        run: |
+          dotnet run tools/PrepareRefs.cs        # reference pack -> wwwroot/ref (decompiler references, on demand)
+          dotnet publish src/Fuget.Wasm -c Release -o dist
+      # --- end fuget ---
       - name: Stage the site
         run: |
           mkdir -p _site
           rsync -a --exclude '.git' --exclude '.github' --exclude '_site' --exclude '_hexad' --exclude 'README.md' ./ _site/
           mkdir -p _site/hexad
           rsync -a --delete --exclude 'README.md' _hexad/web/remote/ _site/hexad/
+          # fuget: publish output replaces the copied sources
+          rm -rf _site/fuget && mkdir -p _site/fuget && cp -r fuget/dist/wwwroot/. _site/fuget/
           touch _site/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:

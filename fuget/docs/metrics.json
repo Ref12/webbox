@@ -1,0 +1,102 @@
+{
+  "link": "#/Newtonsoft.Json/13.0.3/lib/net6.0/Newtonsoft.Json/Newtonsoft.Json.Linq.JObject",
+  "cold": {
+    "marks": {
+      "uiReady": 110,
+      "runtimeCreated": 973,
+      "runtimeReady": 1071,
+      "package": 1291,
+      "assembly": 2428,
+      "firstView": 2488
+    },
+    "wallMs": 2524,
+    "wire": {
+      "framework": 8137341,
+      "refs": 1910,
+      "site": 16017,
+      "nuget": 2443428,
+      "cdn": 0
+    },
+    "assets": [
+      {
+        "url": "index.json",
+        "bytes": 1462,
+        "from": "network",
+        "ms": 197
+      },
+      {
+        "url": "newtonsoft.json.13.0.3.nupkg",
+        "bytes": 2441966,
+        "from": "network",
+        "ms": 519
+      },
+      {
+        "url": "newtonsoft.json.13.0.3.nupkg",
+        "bytes": 2441966,
+        "from": "cache",
+        "ms": 12
+      }
+    ]
+  },
+  "decompileMember": {
+    "type": "Newtonsoft.Json.Linq.JObject",
+    "member": "Parse",
+    "ms": 502,
+    "loaded": 22,
+    "missing": []
+  },
+  "decompileType": {
+    "type": "Newtonsoft.Json.Linq.JObject",
+    "ms": 2090,
+    "loaded": 22,
+    "missing": []
+  },
+  "monacoColoured": true,
+  "diff": {
+    "base": "12.0.3",
+    "ms": 530,
+    "types": 8
+  },
+  "decompileDependency": {
+    "type": "Serilog.ConsoleLoggerConfigurationExtensions",
+    "ms": 125,
+    "loaded": 7,
+    "missing": []
+  },
+  "warm": {
+    "marks": {
+      "uiReady": 37,
+      "runtimeCreated": 521,
+      "runtimeReady": 574,
+      "package": 745,
+      "assembly": 1851,
+      "firstView": 1893
+    },
+    "wallMs": 1927,
+    "assets": [
+      {
+        "url": "newtonsoft.json.13.0.3.nupkg",
+        "from": "cache",
+        "ms": 46
+      },
+      {
+        "url": "index.json",
+        "from": "cache",
+        "ms": 45
+      },
+      {
+        "url": "newtonsoft.json.13.0.3.nupkg",
+        "from": "cache",
+        "ms": 10
+      }
+    ]
+  },
+  "errors": [],
+  "wireTotal": {
+    "framework": 16274682,
+    "refs": 616683,
+    "site": 32034,
+    "nuget": 8272774,
+    "cdn": 954873
+  }
+}
