@@ -46,7 +46,7 @@ export async function decodeShare(fragment) {
     return {
       code: o.c,
       configuration: o.g === 'debug' ? 'debug' : 'release',
-      optimize: o.o === undefined ? (o.g === 'debug' ? DEFAULTS.optimize : DEFAULTS.optimize) : o.o === 1,
+      optimize: o.o === undefined ? DEFAULTS.optimize : o.o === 1,
       langVersion: typeof o.l === 'string' ? o.l : DEFAULTS.langVersion,
       level,
       tab: typeof o.t === 'string' ? o.t : DEFAULTS.tab,
