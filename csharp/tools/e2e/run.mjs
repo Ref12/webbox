@@ -17,7 +17,8 @@ const exe = process.env.CHROME_PATH || ['/usr/bin/chromium', '/usr/bin/google-ch
 const browser = await chromium.launch({ executablePath: exe, args: ['--no-sandbox'] });
 const ctx = await browser.newContext({ viewport: { width: 1100, height: 780 }, permissions: ['clipboard-read', 'clipboard-write'] });
 const page = await ctx.newPage();
-page.on('console', (m) => { const t = m.text(); if (!/Failed to load resource/.test(t)) console.log('[browser]', t.slice(0, 300)); });
+const unhandled = [];
+page.on('console', (m) => { const t = m.text(); if (/Unhandled Exception|PlatformNotSupported/.test(t)) unhandled.push(t.slice(0, 200)); if (!/Failed to load resource/.test(t)) console.log('[browser]', t.slice(0, 300)); });
 page.on('pageerror', (e) => console.log('[pageerror]', e.message));
 const wire = { framework: 0, ref: 0, lazy: 0, other: 0, cdn: 0 };
 page.on('response', async (r) => {
@@ -260,5 +261,6 @@ const out = { cold: { marks: m.marks, firstResultMs: m.firstResultMs, firstCompl
 fs.writeFileSync(path.resolve(metricsOut), JSON.stringify(out, null, 1));
 console.log('metrics written', metricsOut);
 await browser.close(); server.kill();
+assert.deepEqual(unhandled, [], 'no unhandled .NET exceptions in the browser console');
 assert.deepEqual(notFound.filter((u) => !/favicon/.test(u)), [], 'no 404s');
 console.log('E2E OK');
