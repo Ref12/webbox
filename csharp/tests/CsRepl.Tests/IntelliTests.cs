@@ -8,6 +8,18 @@ public class IntelliTests
     private static IntelliService New() => new(Fixture.Refs);
 
     [Fact]
+    public void Host_composition_leaves_out_the_persistent_storage_configuration()
+    {
+        // its static constructor calls Process.GetCurrentProcess(), unsupported in the browser (console: Process_PlatformNotSupported)
+        var asms = new[] { "Microsoft.CodeAnalysis.Workspaces", "Microsoft.CodeAnalysis.CSharp.Workspaces", "Microsoft.CodeAnalysis.Features", "Microsoft.CodeAnalysis.CSharp.Features" }
+            .Select(System.Reflection.Assembly.Load).ToList();
+        var all = asms.SelectMany(a => a.DefinedTypes).Select(x => x.Name).ToList();
+        Assert.Contains("DefaultPersistentStorageConfiguration", all);          // still there in Roslyn: the filter is needed
+        Assert.DoesNotContain(IntelliService.HostPartTypes(asms), x => x.Name == "DefaultPersistentStorageConfiguration");
+        Assert.True(IntelliService.HostPartTypes(asms).Count() > 1000);        // everything else is kept
+    }
+
+    [Fact]
     public async Task Completion_after_dot_lists_members_and_filters()
     {
         var s = New();

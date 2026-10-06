@@ -44,8 +44,20 @@ public sealed class IntelliService
         foreach (var n in new[] { "Microsoft.CodeAnalysis.Workspaces", "Microsoft.CodeAnalysis.CSharp.Workspaces",
                      "Microsoft.CodeAnalysis.Features", "Microsoft.CodeAnalysis.CSharp.Features" })
             asms.Add(Assembly.Load(n));
-        _ws = new AdhocWorkspace(MefHostServices.Create(asms));
+        _ws = new AdhocWorkspace(CreateHost(asms));
     }
+
+    /// <summary>
+    /// Roslyn's MEF parts minus the persistent-storage configuration: DefaultPersistentStorageConfiguration's static constructor
+    /// calls Process.GetCurrentProcess(), which throws PlatformNotSupportedException in the browser (it surfaced as an unhandled
+    /// exception in the console during completion). Without it Roslyn keeps no on-disk cache (there is no disk anyway).
+    /// </summary>
+    public static IEnumerable<Type> HostPartTypes(IEnumerable<Assembly> assemblies) =>
+        assemblies.SelectMany(a => a.DefinedTypes).Select(t => t.AsType())
+            .Where(t => t.Name != "DefaultPersistentStorageConfiguration");
+
+    private static MefHostServices CreateHost(IEnumerable<Assembly> assemblies) =>
+        MefHostServices.Create(new System.Composition.Hosting.ContainerConfiguration().WithParts(HostPartTypes(assemblies)).CreateContainer());
 
     public int SubmissionCount => _submissions.Count;
 
