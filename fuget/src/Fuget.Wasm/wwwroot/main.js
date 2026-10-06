@@ -76,7 +76,7 @@ async function startRuntime() {
 }
 async function call(name, ...args) {
   await runtimeReady;
-  const r = JSON.parse(await exportsRef.Interop[name](...args));
+  const r = JSON.parse(await exportsRef.Interop[name[0].toUpperCase() + name.slice(1)](...args));
   if (r && r.error) throw new Error(r.error);
   return r;
 }
