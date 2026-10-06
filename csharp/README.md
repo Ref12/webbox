@@ -8,16 +8,48 @@ submission in the page, the result is loaded with `Assembly.Load` and run in the
 ## Build, run, publish
 ```
 dotnet test tests/CsRepl.Tests                       # 44 unit tests (completion, classification, resolver, NuGet...; needs network once for the ref-pack NuGet)
-node --test tests/js/*.test.mjs                      # history navigation (stash/restore) and classification->token conversion
+node --test "tests/js/*.test.mjs"                    # history, classification, REPL commands, #r completion (fake NuGet API), copy buttons
 dotnet run tools/PrepareRefs.cs                      # ref pack -> wwwroot/ref: core.bin (9 assemblies), a/<name>.dll (167, on demand), manifest.json, types.json
 dotnet run tools/PrepareLazy.cs                      # Microsoft.CodeAnalysis.Features & deps -> wwwroot/lazy (17 plain assemblies + manifest.json)
 dotnet publish src/CsRepl.Wasm -c Release -o dist    # static site in dist/wwwroot (brotli/gzip precompressed)
 node tools/serve.mjs dist/wwwroot 8080               # any static server works; this one serves .br/.gz
-cd tools/e2e && npm install && node run.mjs ../../dist/wwwroot ../../docs ../../docs/metrics.json   # headless Chromium e2e + screenshots (needs internet: Monaco CDN, nuget.org)
+node tools/stage.mjs dist/wwwroot ../_site/csharp   # what the Pages workflow does after publish (see below); ../_site = the staged site
+cd tools/e2e && npm install && node run.mjs ../../../_site ../../docs ../../docs/metrics.json   # headless Chromium e2e + screenshots, served under /webbox/ by tools/pages-sim.mjs (needs internet: Monaco CDN, nuget.org)
 ```
 Needs the .NET 10 SDK (no `wasm-tools` workload: interpreter only). `ref/` and `lazy/` are generated, not committed.
 
 ![screenshot](docs/screenshot.png) ![phone](docs/screenshot-phone.png)
+
+## Deployed on GitHub Pages (https://ref12labs.github.io/webbox/csharp/)
+`.github/workflows/pages.yml` (webbox root) builds this folder on every push to `main`: `dotnet restore tests/CsRepl.Tests` (fetches the ref pack), `PrepareRefs.cs`, `PrepareLazy.cs`, `dotnet publish`, then `tools/stage.mjs dist/wwwroot _site/csharp`. The source is not copied to the site. `.github/workflows/csharp-ci.yml` runs the .NET and node tests on Ubuntu and Windows.
+* **Base path:** every URL in the app is relative to the page (`ref/…`, `lazy/…`, `_framework/…`, imports), so it works under `/webbox/csharp/` as under `/`. The e2e serves the staged site under `/webbox/` and fails on any 404.
+* **Compression.** Pages gzips text (html/css/js/json) but cannot send precompressed files with `Content-Encoding`, and whether it compresses `.wasm`/`.dll`/`.bin` is not something to rely on. So the staging step keeps `<file>.br` only for the binaries (177 framework `.wasm`, 17 lazy `.dll`, 167 reference `.dll`, `core.bin`), drops every `.gz` and every `.br` of a text file, and the page fetches the `.br` and decodes it itself (`br.js`: 200 KB WebAssembly decoder, vendored from brotli-dec-wasm, MIT OR Apache-2.0; browsers have no `DecompressionStream('brotli')`). The .NET runtime's own downloads go through `withResourceLoader` the same way. The decoded bytes are kept in the Cache API (warm start: no network, no decoding). If a `.br` is missing or fails to decode, the plain file is fetched instead (`?nobr=1` forces that, for measuring).
+* **Measured** (`tools/e2e/measure.mjs`, cold load, Chromium throttled, `tools/pages-sim.mjs` = Pages-like server: prefix, `max-age=600`, gzip on the fly for text only, `.br` as octet-stream). **Not measured on the live Pages URL** (nothing is deployed from this branch); the table is the Pages-shaped simulation. Raw data in `docs/pages-measure.json`.
+
+| Delivery | Transfer to first result | Cable 25 Mbit/s, 20 ms: first result / IntelliSense ready | Mobile 8 Mbit/s, 60 ms |
+|---|---|---|---|
+| **A: `.br` decoded in the page (shipped)** | **9.9 MB** (13.9 MB with IntelliSense) | **4.9 s / 7.6 s** | **12.9 s / 18.6 s** |
+| B: plain files, if Pages gzips wasm/dll | 12.5 MB (17.6 MB) | 5.8 s / 9.0 s | 15.6 s / 22.5 s |
+| C: plain files, Pages sends wasm/dll uncompressed | 33.0 MB (46.8 MB) | 12.7 s / 18.8 s | 37.1 s / 53.1 s |
+
+  Decoding all 32 MB of framework files takes ~0.2 s (wasm brotli) vs ~0.1 s (native gunzip); brotli's 22 % smaller payload pays for that on any link under ~100 Mbit/s, and it is independent of what Pages does with binaries.
+* **Cache busting** (Pages sends `Cache-Control: max-age=600`): app files get content-hashed names (`main.7f86cce51e.js`, references rewritten, `index.html` is the only unhashed one), `dotnet.js` and all data files are requested with `?h=<content hash>` (the hashes are in `ref/manifest.json` and `lazy/manifest.json`, which are themselves requested with a hash that is baked into `main.js`), the .NET framework files are fingerprinted by the SDK, and the framework Cache API entry is named after a build id. A deploy that changes one file re-downloads that file only.
+* **Roslyn persistent storage** is switched off by leaving `DefaultPersistentStorageConfiguration` out of the MEF composition (`IntelliService.HostPartTypes`): its static constructor calls `Process.GetCurrentProcess()`, which throws `PlatformNotSupportedException` in the browser (it used to show up as an unhandled exception in the console). The e2e now fails if the console shows one.
+
+## Commands and directives
+Type a command alone on a line (a REPL command is a whole one-line submission; it is never compiled):
+
+| | |
+|---|---|
+| `#help` | lists the commands, directives and keys |
+| `#clear` or `clear` | clears the transcript, **keeps** variables/usings/references and says so (a bare `clear` is the command, so a variable named `clear` must be written `(clear)`) |
+| `#reset` | forgets the session state (same as the Reset button) |
+| `#load "https://…/x.csx"` | fetches a script and runs it as one submission. **Decision:** a browser has no file system, so only http(s) URLs; the server must allow CORS (raw.githubusercontent.com does); GitHub `blob` and gist page URLs are rewritten to raw; limit 1 MB; `#load` inside a loaded script is a C# error. |
+| `#r "nuget: Id, 1.2.3"` / `#r "System.Net.Http"` | C# script directives (handled by `ReplSession`) |
+
+Directives and commands are coloured as preprocessor directives (`#r`/`#help`… grey, the string orange) in the input and in the history, also before IntelliSense is ready (`commands.js`, merged with Roslyn's spans, which blank `#r` lines).
+**`#r` completion** (`rcomplete.js`, works before Roslyn is ready): inside the quotes it offers `nuget: ` and the framework assemblies; after `nuget: ` package names from nuget.org's autocomplete service (`azuresearch-usnc.nuget.org/autocomplete`, CORS `*`, re-queried as you type), inserted as `Id, `; after the comma the versions of that package, newest stable first (from `api.nuget.org/v3-flatcontainer/<id>/index.json`, CORS open; type `-` for pre-releases). Failures give an empty list.
+**Copy buttons:** output, return-value and error blocks have the same copy icon as the code blocks and copy their plain text. Phone layout unchanged (36 px buttons).
 
 ## What the editor does (all computed by Roslyn in the browser)
 * **IntelliSense** (`src/CsRepl.Intellisense`, `IntelliService`): an `AdhocWorkspace` (MEF host from Workspaces/Features/CSharp.Features) holds the session as a chain of *submission projects*, each referencing the previous one;
@@ -80,9 +112,9 @@ by shipping reference assemblies as static files, and SharpLab uses a server. Tr
 * **RoslynPad: no code was copied.** The approach (an `AdhocWorkspace` over Roslyn Features/Workspaces, submission projects chained for the REPL) is the one RoslynPad.Roslyn and Roslyn's own interactive window use, written fresh here; I did not read or vendor RoslynPad's source this session. (RoslynPad is MIT; vendoring is possible later, e.g. its internal-API wrappers for signature help.)
 * Signature help is our own semantic-model implementation (no documentation for parameters, no generic-method type argument help). Completion does not show item descriptions (no `GetDescriptionAsync` yet) and not extension methods/types from namespaces that are not imported.
 * After completion the item is inserted as text (`Change` exists in the service but is not used by the editor), so items that need extra edits are plain.
-* A browser console error "Process_PlatformNotSupported" from `DefaultPersistentStorageConfiguration` (Roslyn Workspaces) appears during some completion requests; requests still succeed, the failing part is a background cache.
+* (Fixed: the Process_PlatformNotSupported console error from Roslyn's persistent storage, see above.)
 * Unresolved names only load assemblies when the code is submitted (and `using`/`#r` lines while typing); typing a type from an unloaded assembly without `using` shows an error squiggle until you add the `using`.
 * NuGet: simple managed packages only; no native assets, no analyzers/source generators, no `#r "nuget"` version ranges beyond the lower bound, framework-reference packages (e.g. ASP.NET) cannot work. A package needing a runtime assembly the wasm app trimmed or lacks fails at run time with the .NET error.
-* A submission that throws is discarded entirely (csi keeps variables assigned before the throw). No `#load`; no cancellation of an infinite loop (single thread; would need a worker).
+* A submission that throws is discarded entirely (csi keeps variables assigned before the throw). `#load` takes URLs only; no cancellation of an infinite loop (single thread; would need a worker).
 * Compile + run + IntelliSense block the UI thread; moving the runtime to a Web Worker would fix both. The 10 MB framework payload is mostly Roslyn; trimming and AOT are untried.
 * Only Linux/Chromium was run here. Monaco comes from a CDN (the page falls back to a plain textarea without IntelliSense).

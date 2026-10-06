@@ -1,84 +1,84 @@
 {
  "cold": {
   "marks": {
-   "editorReady": 419,
-   "runtimeCreated": 1395,
-   "exportsReady": 1411,
-   "refsReady": 3134,
-   "firstResult": 3691,
-   "intellisenseReady": 5237
+   "editorReady": 366,
+   "runtimeCreated": 1275,
+   "exportsReady": 1293,
+   "refsReady": 3015,
+   "firstResult": 3561,
+   "intellisenseReady": 5099
   },
-  "firstResultMs": 556,
-  "firstCompletionMs": 599,
+  "firstResultMs": 546,
+  "firstCompletionMs": 588,
   "lazy": {
    "files": 17,
-   "rawBytes": 14492840,
-   "wireBytesBr": 4231957,
+   "rawBytes": 14493864,
+   "wireBytesBr": 4232330,
    "fromCache": 0,
-   "downloadMs": 257,
-   "startMs": 654
+   "downloadMs": 240,
+   "startMs": 675
   },
   "coreBundle": {
    "bytes": 1204157,
    "from": "network",
-   "ms": 1626
+   "ms": 1625
   },
   "wireBytesAtFirstResult": {
-   "framework": 9825936,
+   "framework": 9825857,
    "ref": 275391,
    "lazy": 0,
-   "other": 232100,
+   "other": 232103,
    "cdn": 1066693
   },
   "wireBytesTotalAfterIntelliSense": {
-   "framework": 9825936,
+   "framework": 9825857,
    "ref": 339106,
-   "lazy": 4232583,
-   "other": 232100,
+   "lazy": 4232957,
+   "other": 232103,
    "cdn": 4136255
   }
  },
  "warm": {
   "marks": {
-   "editorReady": 171,
-   "runtimeCreated": 385,
-   "exportsReady": 392,
-   "refsReady": 469,
-   "firstResult": 980,
-   "intellisenseReady": 2244
+   "editorReady": 148,
+   "runtimeCreated": 376,
+   "exportsReady": 384,
+   "refsReady": 454,
+   "firstResult": 959,
+   "intellisenseReady": 2250
   },
   "lazy": {
    "files": 17,
-   "rawBytes": 14492840,
+   "rawBytes": 14493864,
    "wireBytesBr": 0,
    "fromCache": 17,
    "downloadMs": 37,
-   "startMs": 507
+   "startMs": 528
   },
   "coreBundle": {
    "bytes": 1204157,
    "from": "cache",
-   "ms": 3
+   "ms": 2
   },
-  "firstCompletionMs": 684,
+  "firstCompletionMs": 691,
   "wireBytes": {
-   "framework": 114545,
+   "framework": 114546,
    "ref": 4942,
-   "lazy": 626,
-   "other": 20878,
+   "lazy": 627,
+   "other": 20881,
    "cdn": 1066693
   }
  },
  "completionLatencyMsWarm": [
-  74,
-  163,
-  249,
+  73,
+  157,
+  247,
   91
  ],
  "completionMsInEditor": [],
  "latency": {
-  "diagnostics": 519,
-  "classify": 522
+  "diagnostics": 511,
+  "classify": 513
  },
  "assets": []
 }

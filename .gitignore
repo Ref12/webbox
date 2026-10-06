@@ -34,3 +34,6 @@ secrets.*
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# local stage of the Pages site
+_site/
