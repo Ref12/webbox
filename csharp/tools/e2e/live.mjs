@@ -8,14 +8,13 @@ const out = {};
 async function open(name) {
   const ctx = await browser.newContext({ viewport: { width: 1100, height: 780 } });
   const page = await ctx.newPage();
-  const cdp = await ctx.newCDPSession(page);
-  await cdp.send('Network.enable');
   const reqs = new Map(), errors = [], bad = [];
-  cdp.on('Network.responseReceived', (e) => reqs.set(e.requestId, { url: e.response.url, status: e.response.status, enc: e.response.headers['content-encoding'] || e.response.headers['Content-Encoding'] || '', type: e.response.mimeType, len: 0 }));
-  cdp.on('Network.loadingFinished', (e) => { const r = reqs.get(e.requestId); if (r) r.len = e.encodedDataLength; });
+  // context-level: also sees the requests of the dedicated workers (the .NET runtimes)
+  ctx.on('requestfinished', async (rq) => { try { const rs = await rq.response(); const h = await rs.allHeaders(); const sz = await rq.sizes();
+    reqs.set(rq, { url: rq.url(), status: rs.status(), enc: h['content-encoding'] || '', type: (h['content-type'] || '').split(';')[0], len: sz.responseBodySize + sz.responseHeadersSize, raw: Number(h['content-length'] || 0) }); } catch {} });
   page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text().slice(0, 200)); });
   page.on('pageerror', (e) => errors.push('pageerror: ' + e.message.slice(0, 200)));
-  page.on('response', (r) => { if (r.status() >= 400) bad.push(r.status() + ' ' + r.url().slice(0, 120)); });
+  ctx.on('response', (r) => { if (r.status() >= 400) bad.push(r.status() + ' ' + r.url().slice(0, 120)); });
   const wire = (re) => { const l = [...reqs.values()].filter((r) => re.test(r.url)); return { files: l.length, mb: +(l.reduce((s, r) => s + r.len, 0) / 1048576).toFixed(2), enc: [...new Set(l.map((r) => r.enc || 'none'))].join('+'), types: [...new Set(l.map((r) => r.type))].join(',') }; };
   return { page, ctx, reqs, errors, bad, wire, name };
 }
@@ -27,7 +26,7 @@ async function csharp() {
   let m = await page.evaluate(() => window.__metrics);
   if (m.error) throw new Error(m.error);
   res.firstResultMs = Date.now() - t0;
-  res.wireAtFirstResult = t.wire(/./).mb;
+  await page.waitForTimeout(300); res.wireAtFirstResult = t.wire(/./).mb;
   await page.evaluate(() => window.__submit('1 + 2'));
   res.firstEval = (await page.locator('.entry').last().innerText()).includes('3');
   await page.waitForFunction(() => window.__metrics?.marks.intellisenseReady || window.__metrics?.intellisenseError, null, { timeout: 300000 });
@@ -60,6 +59,7 @@ async function csharp() {
   res.warmFirstResultMs = Date.now() - tw;
   res.errors = t.errors.filter((e) => !/Failed to load resource/.test(e)); res.bad = t.bad;
   const sample = [...t.reqs.values()].find((r) => /\.wasm/.test(r.url) && /System\.Private\.CoreLib|System\.Linq/.test(r.url)) || [...t.reqs.values()].find((r) => /\.wasm/.test(r.url));
+  res.sampleSet = [...t.reqs.values()].filter((r) => /\\.wasm/.test(r.url)).sort((a, b) => b.len - a.len).slice(0, 3).map((r) => ({ f: r.url.split('/').pop().slice(0, 40), enc: r.enc || 'none', type: r.type, wireKB: Math.round(r.len / 1024) }));
   res.sample = sample && { url: sample.url.split('/').pop(), enc: sample.enc, type: sample.type, wireKB: Math.round(sample.len / 1024) };
   return res;
 }
