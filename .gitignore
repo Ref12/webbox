@@ -4,3 +4,4 @@ node_modules/
 dist/
 *.user
 src/CsRepl.Wasm/wwwroot/ref/
+src/CsRepl.Wasm/wwwroot/lazy/
