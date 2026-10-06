@@ -30,6 +30,10 @@
     <ProjectReference Include="../SharpLab.Core/SharpLab.Core.csproj" />
     <ProjectReference Include="../../../shared/IntelliHost/WebBox.IntelliHost.csproj" />
   </ItemGroup>
+  <!-- ILVerify (a plain DLL reference of SharpLab.Core) is dropped from the publish set by the relink pipeline unless the app references it too -->
+  <ItemGroup>
+    <Reference Include="ILVerify" HintPath="../../lib/ILVerify.dll" />
+  </ItemGroup>
   <!-- AOT needs IL trimming; the framework assemblies that user code and Roslyn-emitted code load by name must survive it -->
   <PropertyGroup Condition="'$(PublishTrimmed)' == 'true'">
     <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
