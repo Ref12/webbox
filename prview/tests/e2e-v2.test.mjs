@@ -321,7 +321,7 @@ test('threads: collapsible boxes, outdated list per file, sanitized Markdown', a
   await p.locator('#win .thread.collapsed .tcol').first().click();
   await p.waitForFunction(() => !document.querySelector('#win .thread.collapsed'));
   const md = await p.locator('#win .thread', { hasText: 'mallory' }).locator('.md').evaluateAll(els => els.map(e => e.innerHTML).join('\n'));
-  assert.ok(!/<img|<script|href="javascript/i.test(md), 'no raw HTML from comments');
+  assert.ok(await p.locator('#win .thread', { hasText: 'mallory' }).locator('.md').evaluateAll(els => els.every(e => !e.querySelector('img, script, u, a:not([href^="https:"])'))), 'no elements made from comment HTML');
   assert.match(md, /&lt;img/); assert.match(md, /<b>bold<\/b>/); assert.match(md, /href="https:\/\/example\.com\/x" target="_blank" rel="noopener noreferrer"/);
   assert.equal(await p.evaluate(() => window.__xss), undefined);
   await finish(h);
@@ -531,7 +531,8 @@ test('phone: comments panel and composer fit the screen', async () => {
   await shot(p, 'phone-threads');
   await p.evaluate(() => document.querySelector('#cm-btn').click());
   await p.waitForSelector('#cpanel .pt');
-  const b = await p.locator('#cpanel').boundingBox(); assert.ok(b.x >= 0 && b.x + b.width <= 391);
+  await p.waitForTimeout(300);
+  const b = await p.locator('#cpanel').boundingBox(); assert.ok(b.x >= 0 && b.x + b.width <= 391, JSON.stringify(b));
   await shot(p, 'phone-comments-panel');
   assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
   await finish(h);
