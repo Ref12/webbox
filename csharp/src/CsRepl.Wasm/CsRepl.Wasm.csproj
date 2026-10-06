@@ -32,6 +32,8 @@
   <ItemGroup Condition="'$(PublishTrimmed)' == 'true'">
     <TrimmerRootAssembly Include="System.Runtime;System.Linq;System.Collections;System.Console;System.Private.CoreLib;System.Runtime.Extensions;System.Threading;System.Threading.Tasks;System.Text.RegularExpressions;System.Linq.Expressions;System.Collections.Concurrent;System.Collections.Immutable;System.Memory;System.Numerics;System.Text.Json;System.Net.Http;System.IO;System.Globalization;System.ComponentModel;System.Diagnostics.Debug;System.Runtime.InteropServices;System.Runtime.Numerics;System.Linq.Queryable;System.ObjectModel;System.Private.Uri;System.Xml.Linq;System.Collections.NonGeneric;System.Collections.Specialized" />
     <TrimmerRootAssembly Include="Microsoft.CSharp" />
+    <!-- what NuGet packages loaded at run time commonly bind to (Newtonsoft.Json: serialization binder, XML, data) -->
+    <TrimmerRootAssembly Include="System.Runtime.Serialization.Formatters;System.Runtime.Serialization.Primitives;System.Private.Xml;System.Private.Xml.Linq;System.Xml.ReaderWriter;System.Data.Common;System.ComponentModel.TypeConverter;System.ComponentModel.Primitives;System.Runtime.Loader;System.Reflection.Emit;System.Reflection.Emit.Lightweight;System.Reflection.Emit.ILGeneration;System.Reflection.Primitives;System.Reflection.TypeExtensions" />
     <!-- Roslyn Features (lazy-loaded, MEF/reflection) may reach any framework API: in the AOT build keep every framework assembly that user code could reference whole -->
     <_RefAsm Include="$(MSBuildThisFileDirectory)wwwroot/ref/a/*.dll" />
     <TrimmerRootAssembly Include="@(_RefAsm->'%(Filename)')" />
