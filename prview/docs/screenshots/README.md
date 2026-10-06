@@ -18,6 +18,7 @@
 | | ![](review-finish-dialog.png) Finish review: Comment / Approve / Request changes |
 | | ![](signin-token.png) add a GitHub token (steps and link) ![](settings.png) Settings: All files stacked |
 | | ![](desktop-one-file.png) default: one file at a time ![](comments-jump-one-file.png) comments panel jump ![](comment-hint-signed-out.png) signed-out + hint |
+| | ![](phone-compact-bar.png) phone: just the compact bar over the file ![](phone-drawer-files.png) drawer on open ![](phone-drawer-options.png) drawer options ![](phone-overview.png) Overview |
 | | ![](tree-icon-light.png) ![](tree-icon-dark.png) tree icon |
 | | ![](home-for-me.png) ![](home-repo.png) ![](home-signed-out.png) PR lists |
 | | ![](desktop-side-by-side-wrap.png) side-by-side: long lines wrap in their pane |

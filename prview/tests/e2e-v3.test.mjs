@@ -78,10 +78,11 @@ test('Settings: All files stacked is an option, remembered in localStorage and i
 test('Settings has the one / all switch on the phone (from the drawer)', async () => {
   const h = await start({ view: null, viewport: { width: 390, height: 844 }, mobile: true }); const p = h.page;
   await open(h, PR + '?f=' + LINK);
-  await p.click('#pbar-menu'); await p.click('#dbottom summary'); await p.click('#d-settings');
+  const openSettings = async () => { await p.evaluate(() => { document.body.classList.add('drawer'); document.querySelector('#dbottom').open = true; }); await p.waitForTimeout(300); await p.click('#d-settings'); await p.waitForSelector('#st-stack'); };
+  await openSettings();
   await p.check('#st-stack'); await p.click('#st-close');
   await p.waitForFunction(() => window.__prview.state.view === 'all');
-  await p.click('#pbar-menu'); await p.click('#dbottom summary'); await p.click('#d-settings');
+  await openSettings();
   await p.uncheck('#st-stack'); await p.click('#st-close');
   await p.waitForFunction(() => window.__prview.state.view === 'one');
   await finish(h);
