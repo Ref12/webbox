@@ -176,7 +176,7 @@ assert.ok(rr[0].startsWith('nuget:'), '#r " offers nuget: first');
 assert.ok(rr.some((r) => /^(Microsoft|System)\./.test(r)), 'and framework assemblies');
 await page.keyboard.press('Tab');
 assert.equal(await getInput(), '#r "nuget: "');
-await page.keyboard.type('Newtonsoft.J');
+await page.keyboard.type('Newtonsoft.J', { delay: 250 });   // like a person: each key asks nuget.org again
 await page.waitForFunction(() => [...document.querySelectorAll('.suggest-widget .monaco-list-row')].some((r) => r.innerText.startsWith('Newtonsoft.Json')), null, { timeout: 20000 });
 rr = await rows(); console.log('packages ->', rr.slice(0, 3).join(' | '));
 await page.keyboard.press('Tab');
