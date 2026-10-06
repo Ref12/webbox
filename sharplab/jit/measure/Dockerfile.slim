@@ -1,0 +1,8 @@
+FROM --platform=linux/amd64 mcr.microsoft.com/dotnet/runtime:10.0 AS rt
+RUN cd /usr/share/dotnet/shared/Microsoft.NETCore.App/*/ && for f in *.dll; do case "$f" in System.Private.CoreLib.dll|System.Runtime.dll|System.Console.dll|System.Threading.dll|System.Collections.dll|System.Linq.dll|System.Memory.dll|System.Runtime.InteropServices.dll|System.Text.Encoding.Extensions.dll|System.Runtime.Extensions.dll|Microsoft.*|System.Diagnostics.Debug.dll|System.Threading.Thread.dll) ;; *) rm -f $f;; esac; done; rm -f *.so.dbg *.pdb; ls | wc -l; du -sh .
+FROM --platform=linux/amd64 mcr.microsoft.com/dotnet/runtime-deps:10.0
+COPY --from=rt /usr/share/dotnet /usr/share/dotnet
+RUN rm -f /usr/share/dotnet/shared/Microsoft.NETCore.App/*/{libmscordaccore,libmscordbi}.so /usr/share/dotnet/shared/Microsoft.NETCore.App/*/Microsoft.VisualBasic*.dll; rm -rf /usr/share/doc /usr/share/man /usr/share/locale /usr/share/info /usr/share/perl* /usr/lib/x86_64-linux-gnu/perl* /var/lib/apt /var/cache /usr/share/zoneinfo /usr/share/lintian /usr/share/common-licenses; ln -s /usr/share/dotnet/dotnet /usr/bin/dotnet
+COPY appout2 /app
+ENV DOTNET_TieredCompilation=0 DOTNET_TieredPGO=0 DOTNET_ReadyToRun=0 DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 DOTNET_JitStdOutFile=/dev/stdout
+CMD ["sh"]
