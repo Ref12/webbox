@@ -1,0 +1,68 @@
+<!--
+  NoWorkloadWasm.props - relink / AOT for .NET 10 browser-wasm WITHOUT `dotnet workload install`.
+  Opt in with ONE line in the csproj (after the Sdk=Microsoft.NET.Sdk.WebAssembly project element):
+      <Import Project="path/to/NoWorkloadWasm.props" />
+  (that line also pulls in NoWorkloadWasm.targets, see the bottom of this file)
+
+  What it does: the wasm-tools workload is only a set of NuGet packs plus a manifest that
+  (1) imports each pack as an MSBuild SDK and (2) flips UsingBrowserRuntimeWorkload. We do the same by hand:
+  the NuGet SDK resolver (<Import Sdk="Id" Version="..">) restores each pack into the normal NuGet cache while
+  MSBuild evaluates, so nothing is installed machine-wide and no workload command is ever run.
+  Only the packs needed for the requested features are fetched:
+     relink (WasmBuildNative / the other relink triggers): emscripten Sdk+Node+Cache(+Python on Windows),
+                                                            Microsoft.NET.Runtime.WebAssembly.Sdk, MonoTargets.Sdk,
+                                                            Runtime.AOT.<host>.Cross.browser-wasm (relink runs it for the icall table)
+     AOT (RunAOTCompilation):                              the above + Microsoft.NET.Runtime.MonoAOTCompiler.Task
+  Properties: NoWorkloadWasmVersion (default = the SDK's bundled runtime version, must equal the runtime pack version),
+              NoWorkloadWasmHostRid (default = detected), NoWorkloadWasmEnabled=false to switch the import off,
+              NoWorkloadWasmAot=true  = RunAOTCompilation=true for command-line use (a *global* RunAOTCompilation=true would
+              re-trigger the workload manifest; in the csproj, RunAOTCompilation=true is fine).
+-->
+<Project>
+  <PropertyGroup Condition="'$(NoWorkloadWasmEnabled)' != 'false' and '$(NoWorkloadWasmImported)' != 'true'">
+    <NoWorkloadWasmImported>true</NoWorkloadWasmImported>
+    <NoWorkloadWasmVersion Condition="'$(NoWorkloadWasmVersion)' == ''">$(BundledNETCoreAppPackageVersion)</NoWorkloadWasmVersion>
+    <NoWorkloadWasmEmsdk Condition="'$(NoWorkloadWasmEmsdk)' == ''">3.1.56</NoWorkloadWasmEmsdk>
+
+    <_NwArch>$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant())</_NwArch>
+    <NoWorkloadWasmHostRid Condition="'$(NoWorkloadWasmHostRid)' == '' and $([MSBuild]::IsOSPlatform('Windows'))">win-$(_NwArch)</NoWorkloadWasmHostRid>
+    <NoWorkloadWasmHostRid Condition="'$(NoWorkloadWasmHostRid)' == '' and $([MSBuild]::IsOSPlatform('OSX'))">osx-$(_NwArch)</NoWorkloadWasmHostRid>
+    <NoWorkloadWasmHostRid Condition="'$(NoWorkloadWasmHostRid)' == '' and $([MSBuild]::IsOSPlatform('Linux'))">linux-$(_NwArch)</NoWorkloadWasmHostRid>
+
+    <!-- same list as the manifest's _WasmNativeWorkloadNeeded, minus the "not a Wasm SDK" clause -->
+    <_NwNeedsNative Condition="'$(WasmBuildNative)' == 'true' or '$(RunAOTCompilation)' == 'true' or '$(WasmEnableSIMD)' == 'false' or '$(WasmEnableExceptionHandling)' == 'false' or '$(InvariantTimezone)' == 'true' or '$(WasmNativeStrip)' == 'false' or '$(WasmNativeDebugSymbols)' == 'true' or '$(WasmSingleFileBundle)' == 'false' or '$(EnableDiagnostics)' == 'true' or '$(WasmProfilers)' != '' or '$(WasmGenerateAppBundle)' == 'true' or '$(EmccInitialHeapSize)' != '' or '$(EmccMaximumHeapSize)' != '' or '$(NoWorkloadWasmNative)' == 'true'">true</_NwNeedsNative>
+    <_NwNeedsAot Condition="'$(RunAOTCompilation)' == 'true' or '$(NoWorkloadWasmAot)' == 'true'">true</_NwNeedsAot>
+    <_NwNeedsNative Condition="'$(_NwNeedsAot)' == 'true'">true</_NwNeedsNative>
+  </PropertyGroup>
+  <!-- The emscripten workload manifest unconditionally flips UsingBrowserRuntimeWorkload on when RunAOTCompilation=true
+       and then asks for the (uninstalled) packs, so hide RunAOTCompilation until NoWorkloadWasm.targets (after the manifests).
+       A global -p:RunAOTCompilation=true cannot be hidden: use -p:NoWorkloadWasmAot=true on the command line instead. -->
+  <PropertyGroup Condition="'$(_NwNeedsAot)' == 'true'">
+    <RunAOTCompilation>false</RunAOTCompilation>
+  </PropertyGroup>
+
+  <!-- Keep the manifest from trying to import (uninstalled) workload packs. NoWorkloadWasm.targets sets it back to true. -->
+  <PropertyGroup Condition="'$(NoWorkloadWasmImported)' == 'true' and '$(_NwNeedsNative)' == 'true'">
+    <UsingBrowserRuntimeWorkload>false</UsingBrowserRuntimeWorkload>
+    <WasmNativeWorkload>false</WasmNativeWorkload>
+  </PropertyGroup>
+
+  <!-- Toolchain packs, restored by the NuGet SDK resolver straight into the NuGet global packages folder -->
+  <Import Condition="'$(_NwNeedsNative)' == 'true'" Project="Sdk.props" Sdk="Microsoft.NET.Runtime.Emscripten.$(NoWorkloadWasmEmsdk).Node.$(NoWorkloadWasmHostRid)" Version="$(NoWorkloadWasmVersion)" />
+  <Import Condition="'$(_NwNeedsNative)' == 'true' and $([MSBuild]::IsOSPlatform('Windows'))" Project="Sdk.props" Sdk="Microsoft.NET.Runtime.Emscripten.$(NoWorkloadWasmEmsdk).Python.$(NoWorkloadWasmHostRid)" Version="$(NoWorkloadWasmVersion)" />
+  <Import Condition="'$(_NwNeedsNative)' == 'true'" Project="Sdk.props" Sdk="Microsoft.NET.Runtime.Emscripten.$(NoWorkloadWasmEmsdk).Sdk.$(NoWorkloadWasmHostRid)" Version="$(NoWorkloadWasmVersion)" />
+  <Import Condition="'$(_NwNeedsNative)' == 'true'" Project="Sdk.props" Sdk="Microsoft.NET.Runtime.Emscripten.$(NoWorkloadWasmEmsdk).Cache.$(NoWorkloadWasmHostRid)" Version="$(NoWorkloadWasmVersion)" />
+  <Import Condition="'$(_NwNeedsNative)' == 'true'" Project="Sdk.props" Sdk="Microsoft.NET.Runtime.MonoTargets.Sdk" Version="$(NoWorkloadWasmVersion)" />
+  <Import Condition="'$(_NwNeedsNative)' == 'true'" Project="Sdk.props" Sdk="Microsoft.NET.Runtime.WebAssembly.Sdk" Version="$(NoWorkloadWasmVersion)" />
+  <Import Condition="'$(_NwNeedsAot)' == 'true'" Project="Sdk.props" Sdk="Microsoft.NET.Runtime.MonoAOTCompiler.Task" Version="$(NoWorkloadWasmVersion)" />
+  <Import Condition="'$(_NwNeedsNative)' == 'true'" Project="Sdk.props" Sdk="Microsoft.NETCore.App.Runtime.AOT.$(NoWorkloadWasmHostRid).Cross.browser-wasm" Version="$(NoWorkloadWasmVersion)" />
+  <Import Condition="'$(_NwNeedsNative)' == 'true'" Project="Sdk.targets" Sdk="Microsoft.NET.Runtime.Emscripten.$(NoWorkloadWasmEmsdk).Cache.$(NoWorkloadWasmHostRid)" Version="$(NoWorkloadWasmVersion)" />
+  <Import Condition="'$(_NwNeedsNative)' == 'true'" Project="Sdk.targets" Sdk="Microsoft.NET.Runtime.MonoTargets.Sdk" Version="$(NoWorkloadWasmVersion)" />
+  <Import Condition="'$(_NwNeedsNative)' == 'true'" Project="Sdk.targets" Sdk="Microsoft.NET.Runtime.WebAssembly.Sdk" Version="$(NoWorkloadWasmVersion)" />
+
+  <!-- The .targets half must be evaluated after the SDK has imported the (skipped) workload manifests,
+       i.e. after Microsoft.Common.targets: hook it in through CustomAfterMicrosoftCommonTargets. -->
+  <PropertyGroup Condition="'$(NoWorkloadWasmImported)' == 'true'">
+    <CustomAfterMicrosoftCommonTargets>$(CustomAfterMicrosoftCommonTargets);$(MSBuildThisFileDirectory)NoWorkloadWasm.targets</CustomAfterMicrosoftCommonTargets>
+  </PropertyGroup>
+</Project>

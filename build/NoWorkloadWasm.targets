@@ -1,0 +1,11 @@
+<Project>
+  <!-- Pretend the workload resolved: the Wasm SDK targets gate native/AOT work on UsingBrowserRuntimeWorkload. -->
+  <PropertyGroup Condition="'$(_NwNeedsNative)' == 'true'">
+    <RunAOTCompilation Condition="'$(_NwNeedsAot)' == 'true'">true</RunAOTCompilation>
+    <UsingBrowserRuntimeWorkload>true</UsingBrowserRuntimeWorkload>
+    <WasmNativeWorkload>true</WasmNativeWorkload>
+    <!-- marker the workload manifest sets; _EnsureWasmRuntimeWorkload errors BLAZORSDK1002 without it -->
+    <UsingBlazorAOTWorkloadManifest>true</UsingBlazorAOTWorkloadManifest>
+  </PropertyGroup>
+
+</Project>
