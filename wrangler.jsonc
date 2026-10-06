@@ -1,0 +1,11 @@
+{
+  // One Cloudflare Worker with static assets for the whole site. The first `wrangler deploy` creates it; a new app is a new folder.
+  // Address: https://webbox.<account subdomain>.workers.dev/  (apps at /csharp/, /keyvault/, ...). The assets are the staged site (_cf_site, see .github/workflows/pages.yml).
+  "name": "webbox",
+  "compatibility_date": "2025-10-01",
+  "assets": {
+    "directory": "./_cf_site",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404"
+  }
+}
