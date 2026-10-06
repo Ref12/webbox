@@ -4,13 +4,18 @@ import { diffFile, layoutRows, wordDiff } from './lib/diff.js';
 import { buildTree, flattenTree, orderedFiles, STATUS } from './lib/tree.js';
 import { parsePrRef, parseRoute, toRoute, githubUrl } from './lib/url.js';
 import { esc, lineHtml, mdLite, ago, shortSha, externalLink } from './lib/render.js';
+import { getSession, setSession, clearSession, loadSettings } from './lib/auth.js';
+import { signInDialog, settingsDialog as settingsUi } from './lib/signin.js';
+import { renderHome } from './lib/home.js';
+import { buildThreads, pendingThread, indexThreads, parsePatch, lineInDiff, excerpt, lineRange } from './lib/threads.js';
 
 const $ = s => document.querySelector(s);
 const store = {
   get(k, d) { try { const v = localStorage.getItem('prview.' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem('prview.' + k, JSON.stringify(v)); } catch { /* storage full or blocked */ } },
 };
-const getToken = () => localStorage.getItem('prview.token') || '';
+let auth = getSession();          // { token, user, kind }: the signed-in state (localStorage)
+const getToken = () => auth.token;
 
 const HEAD_H = 60, ROW_H = 20, GAP_H = 28, NOTE_H = 56, TREE_ROW = 26, CM_H = 120;
 const PHONE = () => matchMedia('(max-width: 800px)').matches;
@@ -25,32 +30,54 @@ function banner(html) { const b = $('#banner'); b.innerHTML = html || ''; b.hidd
 function showError(e) {
   if (e instanceof GhError && e.kind === 'rate') {
     const when = e.reset ? ' It resets at ' + new Date(e.reset).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '.' : '';
-    banner('<b>Rate limit reached.</b> ' + esc(e.message) + when + (e.authed ? '' : ' A token raises the limit to 5,000 requests per hour. <button data-act="settings">Add a token</button>'));
-  } else banner(esc(e.message || String(e)) + (e.kind === 'notfound' || e.kind === 'auth' ? ' <button data-act="settings">Settings</button>' : ''));
+    banner('<b>Rate limit reached.</b> ' + esc(e.message) + when + (e.authed ? ' Signed in you get 5,000 per hour.' : ' Signing in raises the limit to 5,000 requests per hour. <button data-act="signin">Sign in with GitHub</button>'));
+  } else banner(esc(e.message || String(e)) + (e.kind === 'auth' ? ' <button data-act="signin">Sign in again</button>' : e.kind === 'notfound' ? (auth.token ? ' <button data-act="settings">Settings</button>' : ' <button data-act="signin">Sign in</button> to open private repositories.') : e.kind === 'forbidden' ? ' <button data-act="signin">Sign in again</button>' : ''));
 }
 function showRate(r) {
   const el = $('#rate');
   el.textContent = 'API ' + r.remaining + '/' + r.limit;
-  el.title = (r.authed ? 'Using your token. ' : 'Anonymous: 60 requests per hour per IP. ') + 'Resets ' + new Date(r.reset).toLocaleTimeString();
+  el.title = (r.authed ? 'Signed in: 5,000 requests per hour. ' : 'Anonymous: 60 requests per hour per IP. Sign in for 5,000. ') + 'Resets ' + new Date(r.reset).toLocaleTimeString();
   el.style.color = r.remaining < 8 ? 'var(--bad)' : '';
 }
 function openDialog(html) { const d = $('#dlg'); d.innerHTML = html; if (!d.open) d.showModal(); return d; }
-function settingsDialog() {
-  const d = openDialog(`<h2>Settings</h2>
-    <p>Public repositories work without a token, but GitHub allows only <b>60 API requests per hour</b> without one. A token raises that to 5,000 and unlocks private repositories.</p>
-    <label>GitHub token (fine-grained: <i>Pull requests: read</i> and <i>Contents: read</i>)<br><input id="tok" type="password" autocomplete="off" placeholder="github_pat_…" value="${esc(getToken())}"></label>
-    <p class="muted">The token is kept only in this browser's localStorage and is sent only to api.github.com. ${externalLink('https://github.com/settings/personal-access-tokens/new', 'Create a token')}</p>
-    <div class="row2"><button id="tok-clear">Remove token</button><button id="tok-close">Cancel</button><button id="tok-save" class="on">Save</button></div>`);
-  d.querySelector('#tok-save').onclick = () => { localStorage.setItem('prview.token', d.querySelector('#tok').value.trim()); d.close(); location.reload(); };
-  d.querySelector('#tok-clear').onclick = () => { localStorage.removeItem('prview.token'); d.close(); location.reload(); };
-  d.querySelector('#tok-close').onclick = () => d.close();
+// ---------------------------------------------------------------- sign in (OAuth device flow), settings, who
+async function finishSignIn(token, kind) {
+  // verify the token and learn who it belongs to before keeping it
+  const gh = new GitHub({ token });
+  let user;
+  try { user = await gh.user(); } catch (e) { if (e.kind === 'auth') throw new Error('GitHub rejected that token.'); user = null; /* rate limit or network: keep the token, no avatar */ }
+  setSession({ token, user, kind });
+  auth = getSession();
+  $('#dlg').open && $('#dlg').close();
+  location.reload();
+}
+function signIn() { closePopovers(); signInDialog({ openDialog, finish: finishSignIn, pasteToken: settingsDialog }); }
+function signOut() { clearSession(); auth = getSession(); location.reload(); }
+function settingsDialog() { settingsUi({ openDialog, session: auth, finish: finishSignIn, signOut, signIn }); }
+function renderWho() {
+  const el = $('#who');
+  if (!auth.token) { el.innerHTML = '<button id="signin-btn" class="on" title="Sign in with GitHub">Sign in</button>'; $('#signin-btn').onclick = signIn; return; }
+  const u = auth.user;
+  el.innerHTML = `<button id="who-btn" class="who" title="Signed in${u ? ' as ' + esc(u.login) : ''}" aria-haspopup="menu">${u && u.avatar ? `<img class="av" src="${esc(u.avatar)}" alt="" width="22" height="22" referrerpolicy="no-referrer">` : ''}<b id="who-login">${esc(u ? u.login : 'token')}</b> ▾</button>`;
+  $('#who-btn').onclick = () => {
+    if ($('#whomenu')) return closePopovers();
+    closePopovers();
+    const r = $('#who-btn').getBoundingClientRect(), pop = document.createElement('div');
+    pop.className = 'pop'; pop.id = 'whomenu'; pop.style.right = '8px'; pop.style.top = r.bottom + 4 + 'px'; pop.style.minWidth = '200px';
+    pop.innerHTML = `<div class="hint">Signed in${u ? ' as <b>' + esc(u.login) + '</b>' : ''}<br>${auth.kind === 'oauth' ? 'GitHub sign-in' : 'pasted token'}</div><div class="opt" data-w="settings">Settings</div><div class="opt" data-w="out" id="signout">Sign out</div>`;
+    pop.onclick = e => { const w = e.target.closest('[data-w]'); if (!w) return; closePopovers(); w.dataset.w === 'out' ? signOut() : settingsDialog(); };
+    document.body.appendChild(pop);
+    setTimeout(() => document.addEventListener('click', outsideClose, true), 0);
+  };
 }
 function helpDialog() {
   const d = openDialog(`<h2>Keyboard</h2><table>
     <tr><td><kbd>j</kbd> / <kbd>k</kbd></td><td>next / previous file</td></tr>
     <tr><td><kbd>n</kbd> / <kbd>p</kbd></td><td>next / previous change</td></tr>
     <tr><td><kbd>r</kbd></td><td>mark the current file reviewed</td></tr>
-    <tr><td><kbd>c</kbd></td><td>collapse / expand the current file</td></tr>
+    <tr><td><kbd>c</kbd></td><td>comment on the line under the pointer (or the first changed line in view)</td></tr>
+    <tr><td><kbd>x</kbd></td><td>collapse / expand the current file</td></tr>
+    <tr><td><kbd>m</kbd></td><td>comments panel</td></tr>
     <tr><td><kbd>s</kbd></td><td>inline / side-by-side</td></tr>
     <tr><td><kbd>f</kbd></td><td>changes only / full file for everything</td></tr>
     <tr><td><kbd>a</kbd></td><td>all files stacked / one file at a time</td></tr>
@@ -72,7 +99,8 @@ function syncHash() {
 
 async function route() {
   const { ref, tab, params } = parseRoute(location.hash);
-  if (!ref) { S = null; return landing(); }
+  closePopovers();
+  if (!ref) { S = null; return landing(params); }
   if (S && S.key === ref.owner + '/' + ref.repo + '#' + ref.number) {
     S.tab = tab; S.hashSet = null;
     if (params.m) ui.mode = params.m === 'split' ? 'split' : 'inline';
@@ -84,18 +112,18 @@ async function route() {
   await openPr(ref, tab, params);
 }
 
-function landing() {
+function landing(params = {}) {
   document.title = 'PR viewer';
   banner('');
-  const recent = store.get('recent', []);
   $('#main').innerHTML = `<div class="landing"><h1>Pull request viewer</h1>
     <p>Review a GitHub pull request the way Azure DevOps shows it: a file tree with change badges, full-file diffs with expandable context, inline or side-by-side, reviewed checkboxes and a commit picker.</p>
     <form id="land-form"><input id="land-in" type="text" placeholder="https://github.com/owner/repo/pull/123" spellcheck="false" autofocus aria-label="GitHub pull request URL"><button class="on">Open</button></form>
     <div id="land-err" class="muted"></div>
-    <p>Try <a href="#/dotnet/runtime/pull/135064">dotnet/runtime#135064</a>. Public repositories need no sign-in; add a token in ⚙ Settings for private ones or for more than 60 requests per hour.</p>
-    ${recent.length ? '<div class="card recent"><b>Recent</b>' + recent.map(r => `<a href="${toRoute(r.ref)}">${esc(r.ref.owner + '/' + r.ref.repo + '#' + r.ref.number)} <span class="muted">${esc(r.title || '')}</span></a>`).join('') + '</div>' : ''}
+    <p>Try <a href="#/dotnet/runtime/pull/135064">dotnet/runtime#135064</a>. Public repositories need no sign-in; <b>Sign in</b> for private ones, to comment, and for 5,000 requests per hour instead of 60.</p>
+    <div id="home-root"></div>
     <p class="muted">Keys: <kbd>j</kbd>/<kbd>k</kbd> files, <kbd>n</kbd>/<kbd>p</kbd> changes, <kbd>r</kbd> reviewed, <kbd>s</kbd> side-by-side, <kbd>?</kbd> all.</p></div>`;
   $('#land-form').onsubmit = e => { e.preventDefault(); goto($('#land-in').value, '#land-err'); };
+  renderHome($('#home-root'), { gh: new GitHub({ token: getToken(), onRate: showRate }), signedIn: !!auth.token, store, href: ref => toRoute(ref), signIn, params, recent: store.get('recent', []), onError: showError });
 }
 function goto(text, errSel) {
   const ref = parsePrRef(text);
@@ -105,7 +133,7 @@ function goto(text, errSel) {
 $('#goto').onsubmit = e => { e.preventDefault(); const v = $('#goto-in').value; goto(v, '#land-err'); $('#goto-in').value = ''; $('#goto-in').blur(); };
 $('#settings-btn').onclick = settingsDialog;
 $('#menu').onclick = () => document.body.classList.toggle('drawer');
-document.addEventListener('click', e => { const b = e.target.closest('#banner [data-act=settings]'); if (b) settingsDialog(); });
+document.addEventListener('click', e => { const b = e.target.closest('#banner [data-act]'); if (!b) return; if (b.dataset.act === 'settings') settingsDialog(); else if (b.dataset.act === 'signin') signIn(); });
 
 // ---------------------------------------------------------------- loading a pull request
 async function openPr(ref, tab, params) {
@@ -114,7 +142,7 @@ async function openPr(ref, tab, params) {
   const gh = new GitHub({ token: getToken(), onRate: showRate });
   const s = S = {
     ref, key: ref.owner + '/' + ref.repo + '#' + ref.number, gh, tab, view: params.v === 'one' ? 'one' : 'all', filter: '', collapsedDirs: new Set(),
-    items: [], tops: new Float64Array(0), cmH: new Map(), gen: 0, loadQueue: [], active: 0, winFiles: new Set(), selected: params.f || null, current: null, treeRows: [], comments: null,
+    items: [], tops: new Float64Array(0), cmH: new Map(), gen: 0, loadQueue: [], active: 0, winFiles: new Set(), selected: params.f || null, current: null, treeRows: [], comments: null, threads: [], gql: null, pending: [], composer: null, drafts: new Map(), tOpen: new Map(), terr: new Map(), outOpen: new Set(), panel: false, pfilter: 'all', vw: 0, threadItem: new Map(),
   };
   if (params.m) ui.mode = params.m === 'split' ? 'split' : 'inline';
   ui.full = params.x === '1';
@@ -126,10 +154,11 @@ async function openPr(ref, tab, params) {
     s.headSha = pr.head.sha;
     document.title = pr.title + ' · ' + s.key;
     const recent = store.get('recent', []).filter(r => r.ref.owner !== ref.owner || r.ref.repo !== ref.repo || r.ref.number !== ref.number);
-    recent.unshift({ ref, title: pr.title }); store.set('recent', recent.slice(0, 8));
+    recent.unshift({ ref, title: pr.title, at: new Date().toISOString() }); store.set('recent', recent.slice(0, 30));
+    s.pending = store.get('pend:' + s.key + '@' + s.headSha, []);
     s.reviewed = new Set(store.get('rev:' + s.key + '@' + s.headSha, []));
     gh.mergeBase(ref, pr.base.sha, pr.head.sha).then(sha => { if (sha) s.mergeBase = sha; }).catch(() => {}).then(() => { if (S === s) { s.mbReady = true; if (s.gen === 0) applyRange(params.c || '', true); } });
-    gh.prComments(ref).then(c => { s.comments = c; if (S === s) { buildCommentIndex(); if (s.rangeReady) relayout(); } }).catch(e => { s.comments = []; showError(e); });
+    loadComments(s);
     renderPage();
     $('#diff') && ($('#diff').dataset.state = 'loading');
   } catch (e) { if (S === s) { $('#main').innerHTML = '<div class="empty">Could not open this pull request.</div>'; showError(e); } }
@@ -182,31 +211,318 @@ async function applyRange(cparam, first) {
   if (s.tab === 'files') renderDiffSoon();
 }
 
-// ---------------------------------------------------------------- review comments (read only)
+// ---------------------------------------------------------------- review threads: load, index, post
+async function loadComments(s, fresh) {
+  if (fresh) s.gh.cache.delete('comments');
+  try {
+    const [c, g] = await Promise.all([s.gh.prComments(s.ref), s.gh.token ? s.gh.reviewThreads(s.ref).catch(() => null) : null]);
+    if (S !== s) return;
+    s.comments = c; s.gql = g;
+  } catch (e) { s.comments = s.comments || []; if (S === s) showError(e); }
+  if (S === s) rebuildThreads();
+}
+/** Thread state (resolved, thread id) comes from GraphQL; refresh it after something changed. */
+async function refreshGql() {
+  const s = S; if (!s || !s.gh.token) return;
+  try { const g = await s.gh.reviewThreads(s.ref); if (S === s) { s.gql = g; rebuildThreads(); } } catch { /* resolve stays unavailable */ }
+}
+function rebuildThreads() {
+  const s = S; if (!s) return;
+  s.threads = buildThreads(s.comments || [], s.gql);
+  buildCommentIndex();
+  if (s.rangeReady) { relayout(true); updateToolbar(); }
+  renderPanel();
+}
+const me = () => (auth.user ? { login: auth.user.login, avatar_url: auth.user.avatar } : null);
+function allThreads() { return [...(S.threads || []), ...(S.pending || []).map(p => pendingThread({ ...p, user: me() }))]; }
 function buildCommentIndex() {
   const s = S;
-  s.cIndex = new Map();
-  if (!s.comments || !s.fl) return;
-  const live = s.fromSha === s.mergeBase && s.toSha === s.headSha; // positions refer to the PR head
-  s.commentsShown = live;
-  const roots = new Map();
-  for (const c of s.comments) if (!c.in_reply_to_id) roots.set(c.id, { root: c, replies: [] });
-  for (const c of s.comments) if (c.in_reply_to_id && roots.has(c.in_reply_to_id)) roots.get(c.in_reply_to_id).replies.push(c);
-  for (const t of roots.values()) {
-    const c = t.root;
-    let e = s.cIndex.get(c.path);
-    if (!e) s.cIndex.set(c.path, e = { R: new Map(), L: new Map(), loose: [], count: 0 });
-    e.count += 1 + t.replies.length;
-    if (!live) continue;
-    if (c.line && !c.outdated) {
-      const m = c.side === 'LEFT' ? e.L : e.R;
-      if (!m.has(c.line)) m.set(c.line, []);
-      m.get(c.line).push(t);
-    } else e.loose.push(t);
+  s.cAll = allThreads();
+  s.cIndex = indexThreads(s.cAll);
+  s.commentsShown = !!s.fl && s.fromSha === s.mergeBase && s.toSha === s.headSha; // positions refer to the PR head
+}
+function savePending() { store.set('pend:' + S.key + '@' + S.headSha, S.pending); }
+function findThread(id) { return (S.cAll || []).find(t => String(t.id) === String(id)); }
+function canComment(f, side, line) {
+  if (!auth.token || !S.commentsShown || !f || f.st.status !== 'ready') return false;
+  if (f.hunks === undefined) f.hunks = parsePatch(f.patch);
+  return lineInDiff(f.hunks, side === 'L' ? 'LEFT' : 'RIGHT', line);
+}
+/** The comment targets of a row: [{side:'R'|'L', line}] where the add-comment affordance goes. */
+function rowTarget(row) {
+  if (row.k === 'gap') return [];
+  if (ui.mode === 'split') {
+    if (row.k === 'eq') return [{ side: 'R', line: row.b + 1 }];
+    const out = [];
+    if (row.a != null) out.push({ side: 'L', line: row.a + 1 });
+    if (row.b != null) out.push({ side: 'R', line: row.b + 1 });
+    return out;
+  }
+  return row.k === 'del' ? [{ side: 'L', line: row.a + 1 }] : [{ side: 'R', line: row.b + 1 }];
+}
+const inSel = (f, side, line) => {
+  const c = S.drag && S.drag.cur != null ? { path: S.drag.f.filename, side: S.drag.side, from: Math.min(S.drag.anchor, S.drag.cur), to: Math.max(S.drag.anchor, S.drag.cur) }
+    : S.composer ? { path: S.composer.path, side: S.composer.side, from: S.composer.startLine || S.composer.line, to: S.composer.line } : null;
+  return !!c && c.path === f.filename && c.side === side && line >= c.from && line <= c.to;
+};
+
+// ---- rendering of thread boxes, composer
+const avatarHtml = u => u && u.avatar_url ? '<img class="av" src="' + esc(u.avatar_url) + '" alt="" width="24" height="24" loading="lazy" referrerpolicy="no-referrer">' : '<span class="av"></span>';
+const threadOpen = t => S.tOpen.has(String(t.id)) ? S.tOpen.get(String(t.id)) : !t.resolved;
+function commentHtml(c, t, i) {
+  const mine = t.pending;
+  return '<div class="c">' + avatarHtml(c.user) + '<div class="cb"><div class="who"><b>' + esc(c.user ? c.user.login : 'ghost') + '</b> · ' + esc(ago(c.created_at)) + ' ' + (c.html_url ? externalLink(c.html_url, '↗') : '') + (mine ? ' <span class="status s-pending">Pending</span>' : '') + '</div>' +
+    (S.editing === String(t.id) && mine ? '<textarea data-fid="e:' + esc(t.id) + '" rows="3">' + esc(S.editBody) + '</textarea><div class="rbtns"><button data-act="esave" class="on">Save</button><button data-act="ecancel">Cancel</button></div>' : '<div class="md">' + mdLite(c.body) + '</div>') + '</div></div>';
+}
+function threadBox(t) {
+  const id = String(t.id), open = threadOpen(t), all = [t.root, ...t.replies];
+  const status = t.pending ? 'Pending' : t.resolved ? 'Resolved' : t.outdated ? 'Outdated' : 'Active';
+  const where = t.startLine && t.line ? 'lines ' + t.startLine + '–' + t.line : t.line ? 'line ' + t.line : t.originalLine ? 'was line ' + t.originalLine : '';
+  const head = '<div class="th"><span class="tcol" data-act="tcol" role="button" tabindex="0" aria-label="' + (open ? 'Collapse' : 'Expand') + ' thread" title="Collapse / expand">' + (open ? '▾' : '▸') + '</span><span class="status s-' + status.toLowerCase() + '">' + status + '</span>' +
+    '<span class="muted">' + all.length + ' comment' + (all.length === 1 ? '' : 's') + (where ? ' · ' + where : '') + '</span><span class="sp"></span>' +
+    (t.pending ? '<button data-act="tedit">Edit</button><button data-act="tdel">Delete</button>' : t.gid && t.canResolve ? '<button data-act="resolve" title="' + (t.resolved ? 'Reopen this thread' : 'Mark as resolved') + '">' + (t.resolved ? 'Unresolve' : 'Resolve') + '</button>' : '') + '</div>';
+  const cls = 'thread' + (t.resolved ? ' resolved' : '') + (t.pending ? ' pending' : '') + (t.outdated ? ' old' : '') + (S.flash === id ? ' flash' : '');
+  if (!open) return '<div class="' + cls + ' collapsed" data-tid="' + esc(id) + '">' + head + '<div class="tsum">' + esc(t.root.user ? t.root.user.login : 'ghost') + ': ' + esc(excerpt(t.root.body)) + '</div></div>';
+  const err = S.terr.get(id);
+  const reply = !t.pending && auth.token ? '<div class="reply"><textarea data-fid="r:' + esc(id) + '" rows="2" placeholder="Reply…">' + esc(S.drafts.get(id) || '') + '</textarea><div class="rbtns">' + (err ? '<span class="err">' + esc(err) + '</span>' : '') + '<button data-act="reply" class="on">Reply</button></div></div>' : err ? '<div class="err pad">' + esc(err) + '</div>' : '';
+  return '<div class="' + cls + '" data-tid="' + esc(id) + '">' + head + all.map((c, i) => commentHtml(c, t, i)).join('') + reply + '</div>';
+}
+function composerHtml(c) {
+  const lbl = c.startLine ? 'lines ' + c.startLine + '–' + c.line : 'line ' + c.line;
+  const prev = c.tab === 'preview';
+  return '<div class="thread composer" data-cc="1"><div class="th"><b>New comment</b><span class="muted">' + esc(c.path.split('/').pop()) + ' · ' + (c.side === 'L' ? 'old ' : '') + lbl + '</span><span class="sp"></span>' +
+    '<span class="seg"><button data-act="ctab" data-tab="write" class="' + (prev ? '' : 'on') + '">Write</button><button data-act="ctab" data-tab="preview" class="' + (prev ? 'on' : '') + '">Preview</button></span></div>' +
+    (prev ? '<div class="md preview">' + (c.body.trim() ? mdLite(c.body) : '<span class="muted">Nothing to preview</span>') + '</div>'
+      : '<textarea data-fid="c" rows="5" placeholder="Write a comment. Markdown is supported; Ctrl+Enter posts, Esc cancels.">' + esc(c.body) + '</textarea>') +
+    '<div class="rbtns">' + (c.side === 'R' ? '<button data-act="csugg" title="Quote the selected lines as a suggested change">± Suggest</button>' : '') + '<span class="sp"></span>' + (c.err ? '<span class="err">' + esc(c.err) + '</span>' : '') +
+    '<button data-act="ccancel">Cancel</button><button data-act="cpend" title="Keep it as part of a review you finish later"' + (c.busy ? ' disabled' : '') + '>Add to review</button><button data-act="cpost" class="on"' + (c.busy ? ' disabled' : '') + '>' + (c.busy ? 'Posting…' : 'Comment') + '</button></div></div>';
+}
+function outdatedHtml(it) {
+  const open = S.outOpen.has(it.f.filename);
+  return '<div class="olist"><button data-act="outl" aria-expanded="' + open + '">' + (open ? '▾' : '▸') + ' Outdated comments (' + it.threads.length + ')</button><span class="muted"> on lines that are no longer in this diff</span></div>' + (open ? it.threads.map(threadBox).join('') : '');
+}
+
+// ---- actions
+function relayoutKeepFocus() { relayout(true); }
+function openComposer(f, side, line, startLine) {
+  if (!auth.token) return signIn();
+  if (!S.commentsShown) return banner('Comments can be added in <b>All changes</b>, not while a single commit or a range is selected.');
+  const keep = S.composer ? S.composer.body : '';
+  S.composer = { path: f.filename, side, line, startLine: startLine && startLine !== line ? startLine : null, body: keep, tab: 'write', busy: false, err: '' };
+  S.focusId = 'c'; S.caret = keep.length;
+  relayout(true);
+  requestAnimationFrame(() => { const k = S.itemIndex.get(S.composerKey); const el = $('#diff'); if (k !== undefined && el && (S.tops[k] < el.scrollTop || S.tops[k] > el.scrollTop + el.clientHeight - 160)) el.scrollTop = S.tops[k] - el.clientHeight / 2; });
+}
+async function postComposer(asPending) {
+  const s = S, c = s.composer; if (!c || c.busy) return;
+  if (!c.body.trim()) { c.err = 'Write something first.'; return relayout(true); }
+  const f = s.fl.find(x => x.filename === c.path);
+  if (asPending) {
+    s.pending.push({ id: 'p' + Date.now().toString(36) + s.pending.length, path: c.path, line: c.line, side: c.side === 'L' ? 'LEFT' : 'RIGHT', startLine: c.startLine, startSide: c.side === 'L' ? 'LEFT' : 'RIGHT', body: c.body, at: new Date().toISOString() });
+    savePending(); s.composer = null; S.focusId = null; return rebuildThreads();
+  }
+  c.busy = true; c.err = ''; relayout(true);
+  try {
+    const made = await s.gh.postComment(s.ref, { body: c.body, commitId: s.headSha, path: c.path, line: c.line, side: c.side === 'L' ? 'LEFT' : 'RIGHT', startLine: c.startLine, startSide: c.side === 'L' ? 'LEFT' : 'RIGHT' });
+    if (S !== s) return;
+    s.comments = [...(s.comments || []), made]; s.gh.cache.delete('comments');
+    s.composer = null; s.focusId = null; s.flash = String(made.id);
+    rebuildThreads(); refreshGql();
+    setTimeout(() => { if (S === s) { s.flash = null; document.querySelectorAll('.thread.flash').forEach(e => e.classList.remove('flash')); } }, 1800);
+  } catch (e) { if (S === s && s.composer === c) { c.busy = false; c.err = e.message; relayout(true); } else showError(e); }
+}
+async function postReply(t) {
+  const s = S, id = String(t.id), body = (s.drafts.get(id) || '').trim();
+  if (!body) { s.terr.set(id, 'Write something first.'); return relayout(true); }
+  s.terr.delete(id);
+  try {
+    const made = await s.gh.replyTo(s.ref, t.root.id, body);
+    if (S !== s) return;
+    s.comments = [...s.comments, made]; s.gh.cache.delete('comments'); s.drafts.delete(id); s.focusId = null;
+    rebuildThreads();
+  } catch (e) { if (S === s) { s.terr.set(id, e.message); relayout(true); } }
+}
+async function toggleResolve(t) {
+  const s = S, id = String(t.id), to = !t.resolved;
+  s.terr.delete(id);
+  try {
+    await s.gh.setThreadResolved(t.gid, to);
+    if (S !== s) return;
+    const g = s.gql && s.gql.get(t.root.id); if (g) g.resolved = to;
+    s.tOpen.set(id, !to);
+    rebuildThreads();
+  } catch (e) { if (S === s) { s.terr.set(id, e.message); relayout(true); } }
+}
+function commentAction(act, el, f, e) {
+  const tb = el.closest('[data-tid]'), t = tb ? findThread(tb.dataset.tid) : null;
+  switch (act) {
+    case 'addc': {
+      if (S.suppressClick) { S.suppressClick = false; return true; }
+      const cl = el.closest('[data-cl]').dataset.cl, side = cl[0], line = Number(cl.slice(2));
+      const c = S.composer;
+      if (e.shiftKey && c && c.path === f.filename && c.side === side) { const r = lineRange(c.startLine || c.line, line); openComposer(f, side, r.line, r.startLine); }
+      else if (e.shiftKey && S.lastCl && S.lastCl.path === f.filename && S.lastCl.side === side) { const r = lineRange(S.lastCl.line, line); openComposer(f, side, r.line, r.startLine); }
+      else openComposer(f, side, line);
+      S.lastCl = { path: f.filename, side, line };
+      return true;
+    }
+    case 'tcol': if (t) { S.tOpen.set(String(t.id), !threadOpen(t)); relayout(true); } return true;
+    case 'outl': S.outOpen.has(f.filename) ? S.outOpen.delete(f.filename) : S.outOpen.add(f.filename); relayout(true); return true;
+    case 'resolve': if (t) toggleResolve(t); return true;
+    case 'reply': if (t) postReply(t); return true;
+    case 'ctab': S.composer.tab = el.dataset.tab; if (el.dataset.tab === 'write') S.focusId = 'c'; relayout(true); return true;
+    case 'ccancel': S.composer = null; S.focusId = null; relayout(true); return true;
+    case 'cpost': postComposer(false); return true;
+    case 'cpend': postComposer(true); return true;
+    case 'csugg': {
+      const c = S.composer, from = (c.startLine || c.line) - 1, to = c.line;
+      const text = f.st.diff ? f.st.diff.b.slice(from, to).join('\n') : '';
+      c.body += (c.body && !c.body.endsWith('\n') ? '\n' : '') + '```suggestion\n' + text + '\n```\n';
+      c.tab = 'write'; S.focusId = 'c'; S.caret = c.body.length; relayout(true); return true;
+    }
+    case 'tdel': if (t) { S.pending = S.pending.filter(p => p.id !== t.id); savePending(); rebuildThreads(); } return true;
+    case 'tedit': if (t) { S.editing = String(t.id); S.editBody = t.root.body; S.focusId = 'e:' + t.id; relayout(true); } return true;
+    case 'ecancel': S.editing = null; relayout(true); return true;
+    case 'esave': { const p = S.pending.find(x => x.id === S.editing); if (p) { p.body = S.editBody; savePending(); } S.editing = null; rebuildThreads(); return true; }
+  }
+  return false;
+}
+// typing: keep the text in state (the virtual list re-creates boxes as you scroll)
+function onDiffInput(e) {
+  const fid = e.target.dataset && e.target.dataset.fid; if (!fid || !S) return;
+  if (fid === 'c' && S.composer) { S.composer.body = e.target.value; S.composer.err = ''; }
+  else if (fid.startsWith('r:')) S.drafts.set(fid.slice(2), e.target.value);
+  else if (fid.startsWith('e:')) S.editBody = e.target.value;
+  S.caret = e.target.selectionStart;
+}
+function onDiffKey(e) {
+  const fid = e.target.dataset && e.target.dataset.fid; if (!fid) return;
+  if (e.key === 'Escape') { e.preventDefault(); if (fid === 'c') { S.composer = null; S.focusId = null; relayout(true); } else e.target.blur(); }
+  else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    if (fid === 'c') postComposer(false);
+    else if (fid.startsWith('r:')) { const t = findThread(fid.slice(2)); if (t) postReply(t); }
   }
 }
-function threadHtml(t) {
-  return '<div class="thread">' + [t.root, ...t.replies].map(c => `<div class="c"><div class="who"><b>${esc(c.user ? c.user.login : 'ghost')}</b> · ${esc(ago(c.created_at))} ${externalLink(c.html_url, '↗')}${c.outdated ? ' <span class="outdated">outdated</span>' : ''}</div>${mdLite(c.body)}</div>`).join('') + '</div>';
+function restoreFocus() {
+  if (!S.focusId) return;
+  const el = document.querySelector('#win [data-fid="' + CSS.escape(S.focusId) + '"]');
+  if (el && document.activeElement !== el) { el.focus({ preventScroll: true }); try { el.setSelectionRange(S.caret ?? el.value.length, S.caret ?? el.value.length); } catch { /* not a text control */ } }
+}
+// hover, drag across lines
+function onDiffOver(e) {
+  const c = e.target.closest && e.target.closest('[data-cl]'); if (!c) return;
+  const it = c.closest('.it'); if (!it) return;
+  S.hoverCl = { i: Number(it.dataset.i), cl: c.dataset.cl, path: S.items[Number(it.dataset.i)].f.filename };
+  if (S.drag && c.dataset.cl[0] === S.drag.side && S.items[Number(it.dataset.i)].f === S.drag.f) {
+    const n = Number(c.dataset.cl.slice(2));
+    if (n !== S.drag.cur) { S.drag.cur = n; paintSel(); }
+  }
+}
+function paintSel() {
+  document.querySelectorAll('#win [data-cl]').forEach(el => { const it = el.closest('.it'); const f = S.items[Number(it.dataset.i)].f; el.classList.toggle('sel', inSel(f, el.dataset.cl[0], Number(el.dataset.cl.slice(2)))); });
+}
+function onDiffDown(e) {
+  const b = e.target.closest && e.target.closest('.addc'); if (!b || e.button !== 0 || e.shiftKey) return;
+  const c = b.closest('[data-cl]'), it = b.closest('.it'); if (!c || !it) return;
+  S.drag = { f: S.items[Number(it.dataset.i)].f, side: c.dataset.cl[0], anchor: Number(c.dataset.cl.slice(2)), cur: null };
+}
+document.addEventListener('mouseup', () => {
+  const d = S && S.drag; if (!d) return;
+  S.drag = null;
+  if (d.cur != null && d.cur !== d.anchor) { const r = lineRange(d.anchor, d.cur); S.suppressClick = true; setTimeout(() => { if (S) S.suppressClick = false; }, 50); openComposer(d.f, d.side, r.line, r.startLine); }
+  else paintSel();
+});
+
+/** 'c': comment on the line under the pointer, else the first commentable line in view. */
+function commentAtCursor() {
+  if (!auth.token) return signIn();
+  const el = $('#diff');
+  const h = S.hoverCl;
+  if (h && S.items[h.i] && S.items[h.i].f.filename === h.path) {
+    const row = el.querySelector('.it[data-i="' + h.i + '"] [data-cl="' + h.cl + '"]');
+    if (row) { const r = row.getBoundingClientRect(), d = el.getBoundingClientRect(); if (r.top >= d.top && r.bottom <= d.bottom) { return openComposer(S.items[h.i].f, h.cl[0], Number(h.cl.slice(2))); } }
+  }
+  for (let i = firstVisible(el.scrollTop + HEAD_H); i < S.items.length && S.tops[i] < el.scrollTop + el.clientHeight; i++) {
+    const it = S.items[i]; if (it.type !== 'row') continue;
+    for (const tg of rowTarget(it.row)) if (canComment(it.f, tg.side, tg.line)) return openComposer(it.f, tg.side, tg.line);
+  }
+  banner('No line to comment on in view. Scroll to a changed line (or hover one) and press <kbd>c</kbd>.');
+}
+
+// ---- finishing a review
+function reviewDialog() {
+  if (!auth.token) return signIn();
+  const n = S.pending.length;
+  const d = openDialog('<h2>Finish review</h2><p class="muted">' + n + ' pending comment' + (n === 1 ? '' : 's') + ' will be posted with it.</p>' +
+    '<label>Summary (Markdown)<br><textarea id="rv-body" rows="5" placeholder="Leave a summary"></textarea></label>' +
+    '<p><label class="radio"><input type="radio" name="rv" value="COMMENT" checked> <b>Comment</b> <span class="muted">general feedback without approval</span></label>' +
+    '<label class="radio"><input type="radio" name="rv" value="APPROVE"> <b>Approve</b> <span class="muted">approve these changes</span></label>' +
+    '<label class="radio"><input type="radio" name="rv" value="REQUEST_CHANGES"> <b>Request changes</b> <span class="muted">a summary is required</span></label></p>' +
+    '<div class="row2">' + (n ? '<button id="rv-discard">Discard pending</button>' : '') + '<button id="rv-cancel">Cancel</button><button id="rv-go" class="on">Submit review</button></div><div id="rv-msg" class="err"></div>');
+  d.querySelector('#rv-cancel').onclick = () => d.close();
+  const dis = d.querySelector('#rv-discard');
+  if (dis) dis.onclick = () => { S.pending = []; savePending(); d.close(); rebuildThreads(); };
+  d.querySelector('#rv-go').onclick = async () => {
+    const s = S, event = d.querySelector('input[name=rv]:checked').value, body = d.querySelector('#rv-body').value.trim(), msg = d.querySelector('#rv-msg');
+    if (event === 'REQUEST_CHANGES' && !body && !n) return (msg.textContent = 'Add a summary to request changes.');
+    if (event === 'COMMENT' && !body && !n) return (msg.textContent = 'Add a summary or a pending comment.');
+    d.querySelector('#rv-go').disabled = true; msg.textContent = '';
+    try {
+      await s.gh.submitReview(s.ref, { commitId: s.headSha, body, event, comments: s.pending });
+      if (S !== s) return;
+      s.pending = []; savePending(); d.close();
+      banner('Review submitted (' + ({ COMMENT: 'comment', APPROVE: 'approved', REQUEST_CHANGES: 'changes requested' }[event]) + ').');
+      s.gh.cache.delete('comments'); await loadComments(s, true);
+    } catch (e) { msg.textContent = e.message; d.querySelector('#rv-go').disabled = false; }
+  };
+}
+
+// ---- the comments panel and jumping to a thread
+function threadStatus(t) { return t.pending ? 'pending' : t.resolved ? 'resolved' : t.outdated ? 'outdated' : 'active'; }
+function renderPanel() {
+  const el = $('#cpanel'); if (!el || !S) return;
+  el.hidden = !S.panel;
+  $('#cm-btn') && $('#cm-btn').classList.toggle('on', !!S.panel);
+  if (!S.panel) return;
+  const all = S.cAll || [], f = S.pfilter || 'all';
+  const list = all.filter(t => f === 'all' || threadStatus(t) === f);
+  const byFile = new Map();
+  for (const t of list) { if (!byFile.has(t.path)) byFile.set(t.path, []); byFile.get(t.path).push(t); }
+  const counts = k => all.filter(t => k === 'all' || threadStatus(t) === k).length;
+  el.innerHTML = '<div class="ph"><b>Comments</b> <span class="muted">' + all.length + ' thread' + (all.length === 1 ? '' : 's') + '</span><button class="icon" data-p="close" aria-label="Close comments">✕</button></div>' +
+    '<div class="chips">' + ['all', 'active', 'resolved', 'outdated', 'pending'].map(k => '<button data-pf="' + k + '" class="' + (f === k ? 'on' : '') + '">' + k[0].toUpperCase() + k.slice(1) + ' ' + counts(k) + '</button>').join('') + '</div>' +
+    (list.length ? [...byFile].map(([path, ts]) => '<div class="pf" title="' + esc(path) + '">' + esc(path) + '</div>' + ts.map(t => '<a class="pt" role="button" tabindex="0" data-jump="' + esc(String(t.id)) + '">' + avatarHtml(t.root.user) + '<span class="pm"><span class="who"><b>' + esc(t.root.user ? t.root.user.login : 'ghost') + '</b> · ' + (t.line ? 'line ' + t.line : t.originalLine ? 'was line ' + t.originalLine : '') + ' <span class="status s-' + threadStatus(t) + '">' + threadStatus(t) + '</span> <span class="muted">' + (t.replies.length ? t.replies.length + ' repl' + (t.replies.length === 1 ? 'y' : 'ies') : '') + '</span></span><span class="ex">' + esc(excerpt(t.root.body)) + '</span></span></a>').join('')).join('')
+      : '<p class="muted pad">' + (all.length ? 'Nothing in this filter.' : 'No review comments yet.') + '</p>');
+}
+async function jumpToThread(id) {
+  const s = S, t = findThread(id); if (!t) return;
+  if (s.tab !== 'files') { location.hash = toRoute(s.ref, { f: t.path }, 'files'); return; }
+  if (!s.commentsShown) await applyRange('');
+  if (S !== s) return;
+  s.filter = ''; const fi = $('#filter'); if (fi) fi.value = '';
+  if (t.outdated || !t.line) s.outOpen.add(t.path);
+  s.tOpen.set(String(t.id), true);
+  s.selected = t.path; s.current = s.fl.find(x => x.filename === t.path) || s.current;
+  s.jump = String(t.id); s.jumpTries = 0;
+  if (s.view === 'one') relayout(false); else { refreshTree(); relayout(false); }
+  const fl = s.fl.find(x => x.filename === t.path);
+  if (fl && fl.st.collapsed) { fl.st.collapsed = false; relayout(true); }
+  tryJump();
+  if (document.body.classList.contains('phone-panel')) document.body.classList.remove('phone-panel');
+}
+function tryJump() {
+  const s = S; if (!s || !s.jump) return;
+  const key = s.threadItem && s.threadItem.get(s.jump), el = $('#diff');
+  if (key !== undefined && s.itemIndex.has(key)) {
+    const id = s.jump; s.jump = null;
+    el.scrollTop = Math.max(0, s.tops[s.itemIndex.get(key)] - HEAD_H - 70);
+    s.flash = id; s.winKey = null; renderDiff(); renderTree();
+    setTimeout(() => { if (S === s) { s.flash = null; document.querySelectorAll('.thread.flash').forEach(e => e.classList.remove('flash')); } }, 1800);
+    return;
+  }
+  const t = findThread(s.jump);
+  if (t && s.jumpTries++ < 3) { const i = s.itemIndex.get('h:' + t.path); if (i !== undefined) el.scrollTop = s.tops[i]; s.winKey = null; renderDiff(); }
 }
 
 // ---------------------------------------------------------------- page skeleton
@@ -234,10 +550,13 @@ function renderPage() {
       <button id="view-btn" class="hide-phone" title="All files stacked or one file at a time (a)"></button>
       <button id="coll-btn" class="hide-phone" title="Collapse or expand every file"></button>
       <span class="seg hide-phone"><button id="prev-chg" title="Previous change (p)">↑</button><button id="next-chg" title="Next change (n)">↓</button></span>
+      <button id="cm-btn" title="All comment threads">💬 <span id="cm-n"></span></button>
+      <button id="rv-btn" title="Post your pending comments as a review, or approve / request changes" hidden>Finish review</button>
       <button id="help-btn" class="icon hide-phone" title="Keyboard (?)">?</button></div>
     <div id="body"><aside id="tree" aria-label="Changed files"><div id="tspacer" style="position:relative"></div></aside><div id="scrim"></div>
-      <section id="diff" aria-label="Changes"><div id="stick"></div><div id="spacer"><div id="win"></div></div></section></div>`;
+      <section id="diff" aria-label="Changes"><div id="stick"></div><div id="spacer"><div id="win"></div></div></section><aside id="cpanel" aria-label="Comments" hidden></aside></div>`;
   wireFiles();
+  S.vw = $('#diff').clientWidth;
   updateToolbar();
   refreshTree();
   measureChar();
@@ -255,13 +574,21 @@ function wireFiles() {
   $('#next-chg').onclick = () => stepChange(1);
   $('#prev-chg').onclick = () => stepChange(-1);
   $('#help-btn').onclick = helpDialog;
+  renderPanel();
   $('#scrim').onclick = () => document.body.classList.remove('drawer');
   $('#diff').addEventListener('scroll', renderDiffSoon, { passive: true });
   $('#tree').addEventListener('scroll', renderTreeSoon, { passive: true });
   $('#tree').addEventListener('click', onTreeClick);
   $('#diff').addEventListener('click', onDiffClick);
+  $('#diff').addEventListener('input', onDiffInput);
+  $('#diff').addEventListener('keydown', onDiffKey);
+  $('#diff').addEventListener('mouseover', onDiffOver);
+  $('#diff').addEventListener('mousedown', onDiffDown);
+  $('#cpanel').addEventListener('click', onPanelClick);
+  $('#cm-btn').onclick = () => { S.panel = !S.panel; if (PHONE()) document.body.classList.toggle('phone-panel', S.panel); renderPanel(); };
+  $('#rv-btn').onclick = reviewDialog;
   $('#stick').addEventListener('click', onDiffClick);
-  new ResizeObserver(() => { const d = $('#diff'); if (d) { d.style.setProperty('--vw', d.clientWidth + 'px'); renderDiffSoon(true); renderTreeSoon(); } }).observe($('#diff'));
+  new ResizeObserver(() => { const d = $('#diff'); if (d) { d.style.setProperty('--vw', d.clientWidth + 'px'); const w = d.clientWidth; if (S && Math.abs(w - S.vw) > 1) { S.vw = w; if (ui.mode === 'split' && S.fl) relayout(true); } renderDiffSoon(true); renderTreeSoon(); } }).observe($('#diff'));
 }
 
 function updateToolbar() {
@@ -276,7 +603,16 @@ function updateToolbar() {
   const files = s.fl || [];
   const done = files.filter(f => s.reviewed.has(f.filename)).length;
   $('#count').textContent = files.length + ' changed file' + (files.length === 1 ? '' : 's') + ' · ' + done + ' reviewed' + (s.commentsShown ? '' : s.comments && s.comments.length ? ' · comments are shown in All changes' : '');
+  const nthreads = (s.cAll || []).length;
+  $('#cm-n').textContent = nthreads ? String(nthreads) : '';
+  const rb = $('#rv-btn'); rb.hidden = !auth.token || !s.commentsShown; rb.textContent = s.pending.length ? 'Finish review (' + s.pending.length + ')' : 'Review'; rb.classList.toggle('on', s.pending.length > 0);
   $('#coll-btn').textContent = files.length && files.every(f => f.st.collapsed) ? 'Expand all' : 'Collapse all';
+}
+
+function onPanelClick(e) {
+  if (e.target.closest('[data-p=close]')) { S.panel = false; document.body.classList.remove('phone-panel'); return renderPanel(); }
+  const pf = e.target.closest('[data-pf]'); if (pf) { S.pfilter = pf.dataset.pf; return renderPanel(); }
+  const j = e.target.closest('[data-jump]'); if (j) jumpToThread(j.dataset.jump);
 }
 
 function measureChar() {
@@ -323,7 +659,7 @@ function openPicker() {
   document.body.appendChild(pop);
   setTimeout(() => document.addEventListener('click', outsideClose, true), 0);
 }
-function outsideClose(e) { if (!e.target.closest('#picker') && !e.target.closest('#picker-btn')) closePopovers(); }
+function outsideClose(e) { if (!e.target.closest('#picker') && !e.target.closest('#picker-btn') && !e.target.closest('#whomenu') && !e.target.closest('#who-btn') && !e.target.closest('#cpop')) closePopovers(); }
 function closePopovers() { document.querySelectorAll('.pop').forEach(p => p.remove()); document.removeEventListener('click', outsideClose, true); }
 
 // ---------------------------------------------------------------- tree (virtualized)
@@ -374,7 +710,7 @@ function fileComments(f) { return S.commentsShown ? S.cIndex.get(f.filename) : n
 
 function fileRows(f) {
   const st = f.st, ce = fileComments(f);
-  const key = ui.mode + '|' + (ui.full || st.full) + '|' + JSON.stringify(st.expand) + '|' + (ce ? 1 : 0);
+  const key = ui.mode + '|' + (ui.full || st.full) + '|' + JSON.stringify(st.expand) + '|' + (ce ? ce.R.size + ':' + ce.L.size : 0);
   if (st.rkey === key) return st.rows;
   const pin = ce ? { a: new Set([...ce.L.keys()].map(n => n - 1)), b: new Set([...ce.R.keys()].map(n => n - 1)) } : null;
   st.rows = layoutRows(st.diff.segs, { mode: ui.mode, ctx: ui.full || st.full ? Infinity : 3, expand: st.expand, pin });
@@ -382,30 +718,48 @@ function fileRows(f) {
   return st.rows;
 }
 
+function visLen(s) { let n = Math.min(s.length, 3002); for (let i = 0; i < n; i++) if (s.charCodeAt(i) === 9) n += 3; return n; }
+/** Row height: 20 px per text line; side-by-side rows grow when a long line wraps in its pane. */
+function rowHeight(f, row) {
+  if (ui.mode !== 'split') return ROW_H;
+  const cpl = Math.max(8, Math.floor(((S.vw || 1000) / 2 - 1 - 46 - 16 - 8) / charW));
+  let n = 1;
+  if (row.a != null) n = Math.max(n, Math.ceil(visLen(f.st.diff.a[row.a]) / cpl));
+  if (row.b != null) n = Math.max(n, Math.ceil(visLen(f.st.diff.b[row.b]) / cpl));
+  return n * ROW_H;
+}
 function buildItems() {
   const items = [], files = viewFiles();
+  S.threadItem = new Map();
   let maxW = 0;
   for (const f of files) {
     const st = f.st;
     items.push({ key: 'h:' + f.filename, type: 'head', h: HEAD_H, f });
     if (st.collapsed) continue;
     const ce = fileComments(f);
-    if (ce && ce.loose.length) items.push({ key: 'cl:' + f.filename, type: 'cm', f, threads: ce.loose, label: 'Comments on earlier versions of this file', h: S.cmH.get('cl:' + f.filename) || CM_H });
+    if (ce && ce.loose.length) { const k = 'cl:' + f.filename + ':' + S.outOpen.has(f.filename); items.push({ key: k, type: 'cm', f, threads: ce.loose, outdated: true, h: S.cmH.get(k) || 40 }); if (S.outOpen.has(f.filename)) for (const th of ce.loose) S.threadItem.set(String(th.id), k); }
     if (st.status === 'ready') {
       const rows = fileRows(f);
       if (!rows.length) { items.push({ key: 'n:' + f.filename, type: 'note', f, h: NOTE_H, text: f.status === 'renamed' ? 'Renamed without content changes.' : 'No content changes.' }); continue; }
-      const maxLen = Math.min(st.maxLen, 400);
-      const w = ui.mode === 'split' ? 2 * (46 + 16 + maxLen * charW + 16) : 46 * 2 + 16 + maxLen * charW + 16;
+      const maxLen = Math.min(st.maxLen, 3000);
+      // inline: long lines scroll sideways; side-by-side: each pane wraps its own long lines (no sideways scroll)
+      const w = ui.mode === 'split' ? 0 : 46 * 2 + 16 + maxLen * charW + 16;
       maxW = Math.max(maxW, w);
       const seen = new Set();
+      const comp = S.composer && S.composer.path === f.filename ? S.composer : null;
+      let compPlaced = false;
       rows.forEach((row, ri) => {
         const last = ri === rows.length - 1;
-        items.push({ key: row.k === 'gap' ? 'g:' + f.filename + ':' + row.id : 'r:' + f.filename + ':' + (row.a ?? '') + ':' + (row.b ?? ''), type: row.k === 'gap' ? 'gap' : 'row', h: row.k === 'gap' ? GAP_H : ROW_H, f, row, last });
+        items.push({ key: row.k === 'gap' ? 'g:' + f.filename + ':' + row.id : 'r:' + f.filename + ':' + (row.a ?? '') + ':' + (row.b ?? ''), type: row.k === 'gap' ? 'gap' : 'row', h: row.k === 'gap' ? GAP_H : rowHeight(f, row), f, row, last });
+        if (comp && row.k !== 'gap' && !compPlaced && ((comp.side === 'R' && row.b != null && row.k !== 'del' && row.b + 1 === comp.line) || (comp.side === 'L' && row.a != null && row.k !== 'add' && row.a + 1 === comp.line))) {
+          compPlaced = true; const k = 'cc:' + f.filename + ':' + comp.side + comp.line + ':' + comp.tab + ':' + (comp.err ? 1 : 0) + ':' + (comp.busy ? 1 : 0); S.composerKey = k;
+          items.push({ key: k, type: 'cm', f, composer: true, threads: [], h: S.cmH.get(k) || 230 });
+        }
         if (ce && row.k !== 'gap') {
           const ts = [];
           if (row.b != null && row.k !== 'del') for (const t of ce.R.get(row.b + 1) || []) if (!seen.has(t.root.id)) { seen.add(t.root.id); ts.push(t); }
           if (row.a != null && row.k !== 'add') for (const t of ce.L.get(row.a + 1) || []) if (!seen.has(t.root.id)) { seen.add(t.root.id); ts.push(t); }
-          if (ts.length) { const k = 'c:' + f.filename + ':' + ts[0].root.id; items.push({ key: k, type: 'cm', f, threads: ts, h: S.cmH.get(k) || CM_H }); }
+          if (ts.length) { const k = 'c:' + f.filename + ':' + ts[0].root.id + ':' + ts.map(x => (threadOpen(x) ? 'o' : 'c') + x.replies.length + (S.terr.has(String(x.id)) ? 'e' : '') + (S.editing === String(x.id) ? 'x' : '')).join(''); items.push({ key: k, type: 'cm', f, threads: ts, h: S.cmH.get(k) || CM_H }); for (const th of ts) S.threadItem.set(String(th.id), k); }
         }
       });
     } else items.push({ key: 'n:' + f.filename, type: 'note', f, h: NOTE_H });
@@ -436,6 +790,7 @@ function relayout(keepAnchor) {
   S.winKey = null;
   el.dataset.state = S.items.length ? 'ready' : 'empty';
   renderDiff();
+  if (S.jump) tryJump();
 }
 
 let diffRaf = 0, forceRender = false;
@@ -492,20 +847,28 @@ function itemHtml(it, i) {
       else inner = 'Loading ' + esc(f.filename) + '…';
       return wrap('n', `<div class="note"><span class="in">${inner}</span></div>`);
     }
-    case 'cm': return wrap('c', `<div class="cm">${it.label ? `<div class="thread"><div class="c muted">${esc(it.label)}</div></div>` : ''}${it.threads.map(threadHtml).join('')}</div>`, `data-m="${esc(it.key)}"`);
+    case 'cm': return wrap('c', `<div class="cm">${it.outdated ? outdatedHtml(it) : (it.composer ? composerHtml(S.composer) : '') + it.threads.map(threadBox).join('')}</div>`, `data-m="${esc(it.key)}"`);
     default: {
       const r = it.row, last = it.last ? ' last' : '';
       if (ui.mode === 'split') {
         const wr = r.a != null && r.b != null && r.k === 'pair' ? wordRanges(f, [r.a, r.b]) : null;
-        const half = (side, idx, cls) => idx == null ? '<div class="half none"></div>' :
-          `<div class="half ${cls}"><span class="ln">${idx + 1}</span><span class="sg">${cls === 'add' ? '+' : cls === 'del' ? '−' : ''}</span><span class="tx">${textHtml(f, side, idx, wr && wr[side], 'wd')}</span></div>`;
         const changed = r.k === 'pair';
         const same = changed && r.a != null && r.b != null && f.st.diff.a[r.a] === f.st.diff.b[r.b];
+        const half = (side, idx, cls) => {
+          if (idx == null) return '<div class="half none"></div>';
+          const sd = side === 'a' ? 'L' : 'R', ln = idx + 1;
+          const target = sd === 'R' || (changed && !same);   // unchanged lines take comments on the new side only
+          const attrs = target ? ` data-cl="${sd}:${ln}"` : '';
+          const add = target && canComment(f, sd, ln) ? '<button class="addc" data-act="addc" title="Comment on this line (c). Shift-click or drag for several lines." aria-label="Add comment">+</button>' : '';
+          return `<div class="half ${cls}${target && inSel(f, sd, ln) ? ' sel' : ''}"${attrs}>${add}<span class="ln">${ln}</span><span class="sg">${cls === 'add' ? '+' : cls === 'del' ? '−' : ''}</span><span class="tx">${textHtml(f, side, idx, wr && wr[side], 'wd')}</span></div>`;
+        };
         return wrap('r', `<div class="row split${last}">${half('a', r.a, changed && !same ? 'del' : '')}${half('b', r.b, changed && !same ? 'add' : '')}</div>`);
       }
       const wr = r.w ? wordRanges(f, r.w) : null;
       const side = r.k === 'del' ? 'a' : 'b', idx = r.k === 'del' ? r.a : r.b;
-      return wrap('r', `<div class="row ${r.k === 'eq' ? '' : r.k}${last}"><span class="ln">${r.a != null ? r.a + 1 : ''}</span><span class="ln">${r.b != null ? r.b + 1 : ''}</span><span class="sg">${r.k === 'add' ? '+' : r.k === 'del' ? '−' : ''}</span><span class="tx">${textHtml(f, side, idx, wr && wr[side], 'wd')}</span></div>`);
+      const sd = r.k === 'del' ? 'L' : 'R', ln = (r.k === 'del' ? r.a : r.b) + 1;
+      const add = canComment(f, sd, ln) ? '<button class="addc" data-act="addc" title="Comment on this line (c). Shift-click or drag for several lines." aria-label="Add comment">+</button>' : '';
+      return wrap('r', `<div class="row ${r.k === 'eq' ? '' : r.k}${last}${inSel(f, sd, ln) ? ' sel' : ''}" data-cl="${sd}:${ln}">${add}<span class="ln">${r.a != null ? r.a + 1 : ''}</span><span class="ln">${r.b != null ? r.b + 1 : ''}</span><span class="sg">${r.k === 'add' ? '+' : r.k === 'del' ? '−' : ''}</span><span class="tx">${textHtml(f, side, idx, wr && wr[side], 'wd')}</span></div>`);
     }
   }
 }
@@ -529,7 +892,10 @@ function renderDiff() {
     forceRender = false; S.winKey = key;
     let html = ''; const want = new Set();
     for (let i = lo; i < hi; i++) { html += itemHtml(S.items[i], i); if (S.items[i].f.st.status === 'idle') want.add(S.items[i].f); }
+    const hadFocus = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.fid;
+    if (hadFocus) { S.focusId = hadFocus; S.caret = document.activeElement.selectionStart; }
     $('#win').innerHTML = html;
+    restoreFocus();
     S.winFiles = new Set(S.items.slice(lo, hi).map(it => it.f));
     for (const f of want) queueLoad(f);
     // comment threads have no fixed height: measure them and lay out again
@@ -601,6 +967,7 @@ function onDiffClick(e) {
   const f = path ? S.fl.find(x => x.filename === path) : it && it.f;
   if (!f) return;
   const act = t.dataset.act;
+  if (commentAction(act, t, f, e)) return;
   if (act === 'collapse') { f.st.collapsed = !f.st.collapsed; relayout(true); updateToolbar(); }
   else if (act === 'review') toggleReviewed(f);
   else if (act === 'full') { f.st.full = !f.st.full; f.st.expand = {}; if (f.st.status === 'idle') queueLoad(f); relayout(true); }
@@ -665,7 +1032,9 @@ document.addEventListener('keydown', e => {
   else if (k === 'n') stepChange(1);
   else if (k === 'p') stepChange(-1);
   else if (k === 'r' && S.current) toggleReviewed(S.current);
-  else if (k === 'c' && S.current) { S.current.st.collapsed = !S.current.st.collapsed; relayout(true); updateToolbar(); }
+  else if (k === 'c') commentAtCursor();
+  else if (k === 'x' && S.current) { S.current.st.collapsed = !S.current.st.collapsed; relayout(true); updateToolbar(); }
+  else if (k === 'm') $('#cm-btn').click();
   else if (k === 's') setMode(ui.mode === 'split' ? 'inline' : 'split');
   else if (k === 'f') $('#full-btn').click();
   else if (k === 'a') toggleView();
@@ -694,4 +1063,5 @@ function renderCommits() {
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !/[?&]nosw/.test(location.search)) navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});
 window.__prview = { get state() { return S; }, ui };
+renderWho();
 route();
