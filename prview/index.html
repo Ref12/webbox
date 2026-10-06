@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PR viewer</title>
+<meta name="description" content="Review GitHub pull requests the way Azure DevOps shows them: file tree, full-file diffs, side-by-side, reviewed checkboxes.">
+<meta name="theme-color" content="#0f6cbd">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header id="top">
+    <button id="menu" class="icon only-phone" title="Files (t)" aria-label="Show files">☰</button>
+    <a id="brand" href="#/" title="PR viewer home"><b>PR viewer</b></a>
+    <form id="goto" autocomplete="off"><input id="goto-in" type="text" placeholder="Paste a GitHub PR URL…" spellcheck="false" aria-label="GitHub pull request URL"></form>
+    <span id="rate" class="muted" title="GitHub API requests left"></span>
+    <button id="settings-btn" class="icon" title="Settings (token)" aria-label="Settings">⚙</button>
+  </header>
+  <div id="banner" hidden></div>
+  <main id="main"></main>
+</div>
+<dialog id="dlg"></dialog>
+<script type="module" src="app.js"></script>
+</body>
+</html>

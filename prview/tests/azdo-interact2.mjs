@@ -1,0 +1,14 @@
+import { chromium } from 'playwright-core';
+const out = new URL('../docs/reference/', import.meta.url).pathname;
+const B='https://dev.azure.com/dnceng-public/public/_git/dotnet-public-wiki';
+const br = await chromium.launch({ executablePath:'/usr/bin/chromium', args:['--no-sandbox'] });
+const ctx = await br.newContext({ viewport:{width:1600,height:1000} });
+const p = await ctx.newPage(); p.setDefaultTimeout(6000);
+await p.goto(B+'/commit/cd6039e649dcf41c410d9e970d391165cf9b8124',{waitUntil:'domcontentloaded'}); await p.waitForTimeout(8000);
+const shot = async s => { await p.waitForTimeout(1200); await p.screenshot({path: out+'commit-'+s+'.png'}); };
+await p.mouse.click(601,298); await shot('collapsed');
+await p.mouse.click(601,298); await shot('expanded');
+await p.mouse.click(1536,294); await p.waitForTimeout(3000); console.log(p.url()); await shot('view-full');
+await p.goBack().catch(()=>{}); await p.waitForTimeout(5000);
+await p.mouse.click(703,341); await shot('context-expanded');
+await br.close();
