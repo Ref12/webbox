@@ -46,6 +46,12 @@ async function loadLinkTask(p) {
   await p.waitForSelector('.fh[data-path$="LinkTask.cs"]');
   await p.waitForFunction(() => document.querySelector('#win .thread'), null, { timeout: 8000 });
 }
+/** Scroll the diff pane to the box of a thread (by its first comment's id). */
+async function scrollToThread(p, id) {
+  await p.waitForFunction(i => { const s = window.__prview.state; return s.threadItem && s.threadItem.get(String(i)) !== undefined; }, id, { timeout: 8000 });
+  await p.evaluate(i => { const s = window.__prview.state, el = document.querySelector('#diff'); el.scrollTop = Math.max(0, s.tops[s.itemIndex.get(s.threadItem.get(String(i)))] - 160); }, id);
+  await p.waitForTimeout(150);
+}
 /** Hover the first commentable line in view and return its data-cl. */
 async function firstAddable(p) {
   await p.waitForFunction(() => document.querySelector('#win .row .addc, #win .half .addc'), null, { timeout: 8000 });
@@ -284,11 +290,13 @@ test('threads render inline in every view mode: inline / side-by-side x all file
   for (const [qs, label] of [['', 'inline all'], ['&m=split', 'split all'], ['&v=one', 'inline one'], ['&v=one&m=split', 'split one'], ['&x=1', 'inline full files']]) {
     const h = await start(); const p = h.page;
     await open(h, PR + '?f=' + LINK + qs, '.row');
-    await p.waitForSelector('.fh[data-path$="LinkTask.cs"]');
-    await p.waitForFunction(() => document.querySelectorAll('#win .thread').length >= 1, null, { timeout: 8000 });
-    // the multi-line live thread sits under line 273 ...
-    const where = await p.evaluate(() => { const t = [...document.querySelectorAll('#win .thread')].find(x => /lines 269–273/.test(x.innerText)); if (!t) return null; const it = t.closest('.it'); const prev = it.previousElementSibling; return prev && prev.textContent.length > 0 ? prev.querySelector('[data-cl]')?.dataset.cl || prev.querySelector('.half[data-cl]')?.dataset.cl : null; });
-    assert.ok(where === null ? false : /^[RL]:/.test(where), label + ': thread box follows its line, got ' + where);
+    await p.waitForFunction(() => window.__prview.state.threads.length === 3 && window.__prview.state.rangeReady);
+    await scrollToThread(p, LIVE_ROOT);
+    await p.waitForFunction(() => [...document.querySelectorAll('#win .thread')].some(x => /lines 269–273/.test(x.innerText)), null, { timeout: 8000 });
+    // the multi-line live thread sits right under its last line (273)
+    const where = await p.evaluate(() => { const t = [...document.querySelectorAll('#win .thread')].find(x => /lines 269–273/.test(x.innerText)); const prev = t.closest('.it').previousElementSibling; const c = prev && (prev.querySelector('[data-cl]') || {}).dataset; return c ? c.cl : null; });
+    assert.ok(where && /^[RL]:\d+$/.test(where), label + ': thread box follows its line, got ' + where);
+    if (where[0] === 'R') assert.equal(where, 'R:273', label);
     assert.match(await p.locator('#win .thread').first().innerText(), /Active|Resolved/);
     await finish(h);
   }
@@ -301,16 +309,18 @@ test('threads: collapsible boxes, outdated list per file, sanitized Markdown', a
   h.on('GET', /pulls\/135064\/comments\?per_page=100&page=1$/, () => [...JSON.parse(h.rec[url].body), evil]);
   await open(h, PR + '?f=' + LINK);
   await p.waitForSelector('#win .thread');
+  await scrollToThread(p, LIVE_ROOT);
   const ol = p.locator('#win .olist button');
   assert.match(await ol.first().innerText(), /Outdated comments \(1\)/);
   await ol.first().click();
   await p.waitForFunction(() => [...document.querySelectorAll('#win .thread')].some(t => /was line 62/.test(t.innerText)));
+  await scrollToThread(p, LIVE_ROOT);
   await shot(p, 'comments-inline-threads');
   await p.locator('#win .thread:not(.old)').first().locator('.tcol').click();
   await p.waitForSelector('#win .thread.collapsed');
   await p.locator('#win .thread.collapsed .tcol').first().click();
   await p.waitForFunction(() => !document.querySelector('#win .thread.collapsed'));
-  const md = await p.locator('#win .thread', { hasText: 'mallory' }).innerHTML();
+  const md = await p.locator('#win .thread', { hasText: 'mallory' }).locator('.md').evaluateAll(els => els.map(e => e.innerHTML).join('\n'));
   assert.ok(!/<img|<script|href="javascript/i.test(md), 'no raw HTML from comments');
   assert.match(md, /&lt;img/); assert.match(md, /<b>bold<\/b>/); assert.match(md, /href="https:\/\/example\.com\/x" target="_blank" rel="noopener noreferrer"/);
   assert.equal(await p.evaluate(() => window.__xss), undefined);
@@ -396,7 +406,8 @@ test('multi-line comment by shift-click and by drag; side-by-side too; start_lin
   let post = h.calls.filter(c => /pulls\/135064\/comments$/.test(c.url)).at(-1);
   assert.equal(post.body.start_line, a); assert.equal(post.body.line, a + 2); assert.equal(post.body.start_side, 'RIGHT');
   // by drag
-  const b = lines[lines.findIndex((n, i) => n > a + 4 && lines[i + 1] === n + 1)];
+  const b = lines.find(n => (n > a + 3 || n + 1 < a) && lines.includes(n + 1));
+  assert.ok(b);
   await rowOf(b).hover();
   const box1 = await rowOf(b).locator('.addc').boundingBox();
   await p.mouse.move(box1.x + 5, box1.y + 5); await p.mouse.down();
