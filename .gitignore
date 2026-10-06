@@ -41,3 +41,8 @@ _site/
 _cf_site/
 csharp/dist-mt/
 csharp/obj/
+
+# build outputs (the workflow builds them)
+dist/
+dist-aot/
+dist-mt/
