@@ -39,3 +39,6 @@ main { flex: 1; min-height: 0; display: flex; }
 .jit pre { background: var(--panel); padding: 8px; overflow: auto; font: 12px ui-monospace, Menlo, Consolas, monospace; } .jit input[type=text] { width: min(520px, 90%); }
 .toast { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); background: #094771; padding: 6px 14px; border-radius: 6px; z-index: 10; }
 @media (max-width: 820px) { main { flex-direction: column; } #left { border-right: 0; border-bottom: 1px solid var(--line); flex-basis: 45%; } }
+.badge { font-size: 11px; padding: 1px 8px; border-radius: 9px; background: #3a3d43; color: #bbb; white-space: nowrap; margin-left: auto; }
+.badge + .status { margin-left: 0; }
+.badge.ready { color: #8bd48b; } .badge.loading { color: #9cdcfe; }

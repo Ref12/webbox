@@ -69,7 +69,8 @@ const { page } = br;
 
 // ---------- 3. features ----------
 const ed = () => page.evaluate(() => window.__sharplab.ed.get());
-const tab = async (t) => { await page.click('#tabs button[data-tab=' + t + ']'); await page.waitForTimeout(150); };
+const settle = () => page.evaluate(() => window.__sharplab.rendering);   // views are drawn by the exec worker: wait for the one in progress
+const tab = async (t) => { await page.click('#tabs button[data-tab=' + t + ']'); await settle(); await page.waitForTimeout(150); };
 const outText = (id) => page.evaluate((i) => { const h = document.getElementById(i); const m = window.monaco?.editor.getEditors().find((e) => h.contains(e.getDomNode())); return m ? m.getValue() : h.innerText; }, id);
 
 // default sample: lowered C# shows the closure class
@@ -77,7 +78,7 @@ await tab('cs');
 let cs = await outText('out-cs');
 assert.match(cs, /DisplayClass/, 'level 2 shows the closure display class');
 await page.selectOption('#level', '3');
-await page.waitForTimeout(300);
+await settle(); await page.waitForTimeout(300);
 cs = await outText('out-cs');
 assert.doesNotMatch(cs, /DisplayClass/, 'level 3 hides it');
 assert.match(cs, /where n > limit/, 'level 3 shows the query expression');
@@ -89,17 +90,17 @@ const ilRelease = await outText('out-il');
 assert.match(ilRelease, /\.method public hidebysig static/); assert.match(ilRelease, /ldc\.i4/);
 await page.selectOption('#cfg', 'debug');
 await page.waitForFunction(() => window.__sharplab.state.configuration === 'debug' && !document.getElementById('opt').checked);
-await page.waitForTimeout(1200);
+await settle(); await page.waitForTimeout(1200);
 const ilDebug = await outText('out-il');
 assert.notEqual(ilDebug, ilRelease, 'Debug IL differs from Release IL');
 assert.match(ilDebug, /nop/, 'debug IL has nops');
 await page.selectOption('#cfg', 'release');
-await page.waitForTimeout(1200);
+await settle(); await page.waitForTimeout(1200);
 await page.evaluate(() => { const c = document.getElementById('opt'); c.checked = false; c.dispatchEvent(new Event('change')); });
-await page.waitForTimeout(1200);
+await settle(); await page.waitForTimeout(1200);
 assert.match(await outText('out-il'), /nop/, 'optimize off alone also gives debug-style IL');
 await page.evaluate(() => { const c = document.getElementById('opt'); c.checked = true; c.dispatchEvent(new Event('change')); });
-await page.waitForTimeout(800);
+await settle(); await page.waitForTimeout(800);
 
 // Syntax tree, both ways
 await tab('syntax');
@@ -110,12 +111,12 @@ await page.evaluate(() => window.__sharplab.setCode('// c\nclass A { int F() => 
 await page.waitForFunction(() => document.querySelector('#tree .row[data-kind=CompilationUnit]'));
 // tree -> editor: open all along a path by revealing the 'class' keyword
 await page.evaluate(() => window.__sharplab.ed.setSel(6, 11));
-await page.waitForTimeout(300);
+await settle(); await page.waitForTimeout(300);
 assert.equal(await page.locator('#tree .row.sel').getAttribute('data-kind'), 'ClassKeyword', 'editor selection -> tree');
 await page.locator('#tree .row[data-kind=IdentifierToken]').first().click();
 assert.deepEqual(await page.evaluate(() => window.__sharplab.ed.getSel()), { start: 11, end: 12 }, 'tree click -> editor selection');
 await page.evaluate(() => window.__sharplab.ed.setSel(2, 2));
-await page.waitForTimeout(300);
+await settle(); await page.waitForTimeout(300);
 assert.equal(await page.locator('#tree .row.sel').getAttribute('data-kind'), 'SingleLineCommentTrivia', 'caret in a comment selects trivia');
 
 // Run + Verify
@@ -146,7 +147,7 @@ assert.ok((await page.evaluate(() => window.__metrics.assets)).some((a) => a.pat
 const shareCode = 'using System;\nclass Shared { static void Main() { Console.WriteLine("shared ✓"); } }\n';
 await page.evaluate((c) => window.__sharplab.setCode(c), shareCode);
 await page.selectOption('#lang', '12'); await tab('cs'); await page.selectOption('#level', '3'); await tab('il');
-await page.waitForTimeout(800);
+await settle(); await page.waitForTimeout(800);
 await page.evaluate(() => { window.__lastShare = undefined; });
 await page.click('#share');
 await page.waitForFunction(() => window.__lastShare);
@@ -204,13 +205,13 @@ public class Demo
 await page.waitForFunction(() => window.__sharplab.last?.success);
 await tab('cs');
 await page.selectOption('#level', '2');
-await page.waitForTimeout(1000);
+await settle(); await page.waitForTimeout(1000);
 const compiles = await page.evaluate(() => window.__metrics.compiles);
 metrics.compileMsLast5 = compiles.slice(-5);
 metrics.viewMs = await page.evaluate(() => window.__metrics.views);
 fs.mkdirSync(docs, { recursive: true });
 await page.screenshot({ path: path.join(docs, 'screenshot.png') });
-await tab('syntax'); await page.evaluate(() => window.__sharplab.ed.setSel(150, 150)); await page.waitForTimeout(500);
+await tab('syntax'); await page.evaluate(() => window.__sharplab.ed.setSel(150, 150)); await settle(); await page.waitForTimeout(500);
 await page.screenshot({ path: path.join(docs, 'screenshot-syntax.png') });
 fs.writeFileSync(metricsOut, JSON.stringify(metrics, null, 2));
 console.log('E2E OK', JSON.stringify({ plainGzipAllFirstView: metrics.plain_gzipAll.cold.firstViewMs, shippedCold: metrics.shipped.cold.firstViewMs, shippedWarm: metrics.shipped.warm.firstViewMs }));

@@ -1,5 +1,5 @@
 import { History } from './history.js';
-import { toHtml } from './classify.js';
+import { toHtml, VS_DARK } from './classify.js';
 import { registerIntellisense } from './intellisense.js';
 import { parseCommand, directiveSpans, handleCommand } from './commands.js';
 import { addCopyButton } from './copy.js';
@@ -35,11 +35,6 @@ function loadMonaco() {
     setTimeout(() => reject(new Error('monaco timeout')), 8000);
   });
 }
-const VS_DARK = {
-  keyword: '569cd6', keywordControl: 'd8a0df', class: '4ec9b0', struct: '4ec9b0', delegate: '4ec9b0', typeParam: '4ec9b0', interface: 'b8d7a3', enum: 'b8d7a3',
-  method: 'dcdcdc', property: 'dcdcdc', field: 'dcdcdc', local: 'dcdcdc', event: 'dcdcdc', namespace: 'dcdcdc', constant: 'dcdcdc', enumMember: 'dcdcdc', label: 'dcdcdc',
-  parameter: '9cdcfe', string: 'd69d85', regex: 'd69d85', stringEscape: 'ffd68f', number: 'b5cea8', comment: '57a64a', xmlDoc: '608b4e', operator: 'b4b4b4', punct: 'dcdcdc', preproc: '9b9b9b',
-};
 
 let editor;   // { get(), set(v), focus(), model?, refresh() }
 let monacoRef = null, intelli = null;

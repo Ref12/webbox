@@ -1,12 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <!-- Roslyn language services (completion, quick info, signature help, diagnostics, classification) over an AdhocWorkspace.
+       Shared by csharp/ (script submissions) and sharplab/ (one regular document). Loaded lazily in the browser, never referenced by a Wasm app. -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
+    <RootNamespace>WebBox.Intellisense</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Features" Version="5.0.0" />
-    <ProjectReference Include="../CsRepl.Core/CsRepl.Core.csproj" />
   </ItemGroup>
 </Project>

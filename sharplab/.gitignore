@@ -5,3 +5,4 @@ dist/
 *.user
 src/SharpLab.Wasm/wwwroot/ref/
 _site/
+src/SharpLab.Wasm/wwwroot/lazy/

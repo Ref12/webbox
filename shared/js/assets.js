@@ -1,8 +1,9 @@
 // Everything the runtime workers need to get bytes: a retrying fetch, the Cache API, optional in-worker Brotli (GitHub Pages only), and the
 // JS side of Interop.FetchAsset / TakeAsset. No DOM: runs in a worker.
+// Shared by csharp/ and sharplab/: it imports the BUILD and BROTLI settings from the app's own ./config.js; `prefix` names the app's Cache API entries.
 import { BUILD, BROTLI } from './config.js';
 
-export function createAssets({ emit, threads = false, aot = false }) {
+export function createAssets({ emit, threads = false, aot = false, prefix = 'csrepl', brotli = BROTLI }) {
   const hashes = {};   // site path -> content hash (from the manifests): a changed file is a new URL
   const withHash = (p) => (hashes[p] ? p + '?h=' + hashes[p] : p);
   const net = { started: 0, done: 0, bytes: 0, retries: 0 };
@@ -42,7 +43,7 @@ export function createAssets({ emit, threads = false, aot = false }) {
   // GitHub Pages only: binaries are shipped as <file>.br and decoded here; the plain file is the fallback.
   const PACKED = /\.(wasm|dll|bin|pdb)(\?|$)/;
   async function fetchPacked(key) {
-    if (BROTLI && PACKED.test(key)) {
+    if (brotli && PACKED.test(key)) {
       try {
         const u = new URL(key); u.pathname += '.br';
         const resp = await fetch(u.href);
@@ -86,9 +87,9 @@ export function createAssets({ emit, threads = false, aot = false }) {
     } else for (const x of m.files || []) if (x.h) hashes['lazy/' + x.name] = x.h;
   }
   // The runtime's own downloads: Cache API first. Only on GitHub Pages is the .wasm taken from <file>.br; elsewhere the runtime's default (the server compresses).
-  const fwCacheName = 'csrepl-fw-' + BUILD + (threads ? '-mt' : aot ? '-aot' : '');
+  const fwCacheName = prefix + '-fw-' + BUILD + (threads ? '-mt' : aot ? '-aot' : '');
   function loadBootResource(type, name, defaultUri) {
-    if (!BROTLI || !/\.wasm$/.test(name)) return undefined;
+    if (!brotli || !/\.wasm$/.test(name)) return undefined;
     return (async () => {
       const key = new URL(defaultUri, self.location.href).href;
       const cache = await cacheOpen(fwCacheName);
@@ -108,7 +109,7 @@ export function createAssets({ emit, threads = false, aot = false }) {
   const hostModule = {
     async fetchAsset(path) {
       const volatile = /index\.json$|manifest\.json$/.test(path);
-      const r = await getBytes(path, /^https?:/.test(path) ? 'csrepl-nuget-v1' : 'csrepl-refs-' + refVersion, { cacheIt: !volatile });
+      const r = await getBytes(path, /^https?:/.test(path) ? prefix + '-nuget-v1' : prefix + '-refs-' + refVersion, { cacheIt: !volatile });
       taken.set(path, r.bytes ?? new Uint8Array(0));
       if (r.bytes && !volatile) assets.push({ path, bytes: r.bytes.length, from: r.from, ms: Math.round(r.ms) });
     },

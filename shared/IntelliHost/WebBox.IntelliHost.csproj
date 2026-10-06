@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The thin part of IntelliSense that a Wasm app references: it loads WebBox.Intellisense (and Roslyn Features/Workspaces) lazily, after first paint, and
+       talks to it through reflection with plain strings. No Roslyn dependency here, so the app's boot payload does not grow. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>WebBox.Intellisense</RootNamespace>
+  </PropertyGroup>
+</Project>

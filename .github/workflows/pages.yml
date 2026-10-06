@@ -71,6 +71,7 @@ jobs:
           # restores Microsoft.NETCore.App.Ref (the reference assemblies PrepareRefs.cs packs) into the NuGet cache
           dotnet restore tests/SharpLab.Tests
           dotnet run tools/PrepareRefs.cs
+          dotnet run tools/PrepareLazy.cs        # IntelliSense assemblies -> wwwroot/lazy (shared/Intellisense, fetched after first paint)
           dotnet publish src/SharpLab.Wasm -c Release -o dist
       - name: Stage the site
         run: |

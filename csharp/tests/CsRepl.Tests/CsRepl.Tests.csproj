@@ -20,6 +20,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/CsRepl.Core/CsRepl.Core.csproj" />
-    <ProjectReference Include="../../src/CsRepl.Intellisense/CsRepl.Intellisense.csproj" />
+    <ProjectReference Include="../../../shared/Intellisense/WebBox.Intellisense.csproj" />
   </ItemGroup>
 </Project>

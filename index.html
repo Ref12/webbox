@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>webbox</title>
 <meta name="description" content="A playground of small web apps.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#14161b" media="(prefers-color-scheme: dark)">
 <style>
   :root { --bg:#f6f7f9; --panel:#ffffff; --text:#1b1d22; --muted:#626a76; --line:#dde1e7; --accent:#2f5fd0; }
   @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#14161b; --panel:#1d2027; --text:#e6e8ec; --muted:#9aa2ae; --line:#2e333d; --accent:#7aa2f7; } }
@@ -26,7 +31,9 @@
   <a class="app" href="speech-test/"><b>Speech keep-alive</b><span>Test which ways of speaking and listening (browser voice, audio, Web Audio, wake lock, microphone) keep working with the screen off, in a tab or installed.</span></a>
   <a class="app" href="sharplab/"><b>SharpLab (C# on WebAssembly)</b><span>Type C# and see its syntax tree, IL, decompiled lowered C#, run output and IL verification, all computed in your browser by Roslyn on .NET WebAssembly. Share links carry the code and options.</span></a>
   <a class="app" href="keyvault/"><b>Key Vault</b><span>Sign in with Azure, browse your Key Vaults and show, copy and edit secrets inline in one window (device-code sign-in and secret values go through your own small CORS proxy Worker).</span></a>
+  <a class="app" href="prview/"><b>PR viewer</b><span>Review a GitHub pull request like Azure DevOps: a file tree with change badges, full-file diffs inline or side by side, review comments at their lines, reviewed checkboxes and a commit picker. Public repos need no sign-in.</span></a>
   <a class="app" href="csharp/"><b>C# interactive</b><span>A C# REPL with IntelliSense that compiles and runs in your browser on .NET WebAssembly (Roslyn, NuGet packages with <code>#r</code>, nothing leaves the page).</span></a>
 </main>
+<script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});</script>
 </body>
 </html>
