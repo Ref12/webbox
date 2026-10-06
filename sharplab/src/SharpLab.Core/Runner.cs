@@ -44,6 +44,12 @@ public static class Runner
         }
     }
 
+    private static AssemblyLoadContext CreateContext()
+    {
+        try { return new AssemblyLoadContext("sharplab-run", isCollectible: true); }
+        catch (PlatformNotSupportedException) { return new AssemblyLoadContext("sharplab-run-" + Guid.NewGuid().ToString("N")); }
+    }
+
     public static string FormatException(Exception e)
     {
         var sb = new System.Text.StringBuilder();
