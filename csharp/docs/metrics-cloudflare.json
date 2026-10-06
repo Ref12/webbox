@@ -1,0 +1,86 @@
+{
+ "cold": {
+  "marks": {
+   "editorReady": 1666,
+   "exec.runtimeCreated": 3425,
+   "exec.exportsReady": 3425,
+   "exec.refsReady": 3741,
+   "exec.firstResult": 4587,
+   "intelli.runtimeCreated": 5759,
+   "intelli.exportsReady": 5759,
+   "intelli.refsReady": 5850,
+   "intellisenseReady": 8325
+  },
+  "firstResultMs": 846,
+  "firstCompletionMs": 1069,
+  "lazy": {
+   "files": 17,
+   "rawBytes": 14493864,
+   "wireBytesBr": 5341859,
+   "fromCache": 0,
+   "downloadMs": 444,
+   "startMs": 880
+  },
+  "coreBundle": {
+   "bytes": 1204157,
+   "from": "network",
+   "ms": 147
+  },
+  "wireBytesAtFirstResult": {
+   "framework": 12247540,
+   "ref": 358576,
+   "lazy": 0,
+   "other": 28656,
+   "cdn": 1066131
+  },
+  "wireBytesTotalAfterIntelliSense": {
+   "framework": 48990070,
+   "ref": 443530,
+   "lazy": 5342458,
+   "other": 50544,
+   "cdn": 4137155
+  }
+ },
+ "warm": {
+  "marks": {
+   "editorReady": 318,
+   "exec.runtimeCreated": 1776,
+   "exec.exportsReady": 1777,
+   "exec.refsReady": 1931,
+   "exec.firstResult": 2681,
+   "intelli.runtimeCreated": 3943,
+   "intelli.exportsReady": 3943,
+   "intelli.refsReady": 4038,
+   "intellisenseReady": 6111
+  },
+  "lazy": {
+   "files": 17,
+   "rawBytes": 14493864,
+   "wireBytesBr": 0,
+   "fromCache": 17,
+   "downloadMs": 55,
+   "startMs": 753
+  },
+  "coreBundle": {
+   "bytes": 1204157,
+   "from": "cache",
+   "ms": 4
+  },
+  "firstCompletionMs": 1230,
+  "wireBytes": {
+   "framework": 24495020,
+   "ref": 9964,
+   "lazy": 599,
+   "other": 35952,
+   "cdn": 1066131
+  }
+ },
+ "completionLatencyMsWarm": [
+  118,
+  163,
+  293,
+  116
+ ],
+ "completionMsInEditor": [],
+ "assets": []
+}
