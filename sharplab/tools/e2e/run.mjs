@@ -13,9 +13,12 @@ const PREFIX = '/webbox/sharplab/';
 const exe = process.env.CHROME_PATH || ['/usr/bin/chromium', '/usr/bin/google-chrome', 'C:/Program Files/Google/Chrome/Application/chrome.exe'].find((p) => fs.existsSync(p));
 const browser = await chromium.launch({ executablePath: exe, args: ['--no-sandbox'] });
 const metrics = {};
+const servers = [];
+process.on('exit', () => servers.forEach((s) => s.kill()));
 
 async function serve(port, encodings) {
   const s = spawn(process.execPath, [path.resolve('..', 'serve.mjs'), site, String(port), PREFIX], { stdio: 'inherit', env: { ...process.env, SERVE_ENCODINGS: encodings } });
+  servers.push(s);
   await new Promise((r) => setTimeout(r, 800));
   return s;
 }

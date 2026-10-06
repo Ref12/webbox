@@ -16,7 +16,7 @@ public static class Runner
         await Gate.WaitAsync();
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var output = new StringWriter();
-        var oldOut = Console.Out; var oldErr = Console.Error; var oldIn = Console.In;
+        var oldOut = Console.Out; var oldErr = Console.Error;   // (Console.In is not readable in the browser runtime: PlatformNotSupported)
         // Collectible contexts are not supported by the browser runtime (PlatformNotSupported); a plain one per run leaks the (small) assembly until reload.
         var alc = CreateContext();
         try
@@ -38,7 +38,7 @@ public static class Runner
         }
         finally
         {
-            Console.SetOut(oldOut); Console.SetError(oldErr); Console.SetIn(oldIn);
+            Console.SetOut(oldOut); Console.SetError(oldErr);
             if (alc.IsCollectible) try { alc.Unload(); } catch (InvalidOperationException) { }
             Gate.Release();
         }
