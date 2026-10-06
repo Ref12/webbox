@@ -145,7 +145,7 @@ assert.ok((await page.evaluate(() => window.__metrics.assets)).some((a) => a.pat
 // ---------- 4. share link ----------
 const shareCode = 'using System;\nclass Shared { static void Main() { Console.WriteLine("shared ✓"); } }\n';
 await page.evaluate((c) => window.__sharplab.setCode(c), shareCode);
-await page.selectOption('#lang', '12'); await page.selectOption('#level', '3'); await tab('il');
+await page.selectOption('#lang', '12'); await tab('cs'); await page.selectOption('#level', '3'); await tab('il');
 await page.waitForTimeout(800);
 await page.click('#share');
 const url = await page.evaluate(() => window.__lastShare);
@@ -184,8 +184,8 @@ public class Demo
 }
 `));
 await page.waitForFunction(() => window.__sharplab.last?.success);
-await page.selectOption('#level', '2');
 await tab('cs');
+await page.selectOption('#level', '2');
 await page.waitForTimeout(1000);
 const compiles = await page.evaluate(() => window.__metrics.compiles);
 metrics.compileMsLast5 = compiles.slice(-5);
