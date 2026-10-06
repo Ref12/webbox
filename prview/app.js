@@ -1036,7 +1036,7 @@ function stepFile(d) {
   const next = list[Math.max(0, Math.min(list.length - 1, cur + d))];
   if (next) selectFile(next.filename);
 }
-function viewFilesAll() { const q = S.filter.trim().toLowerCase(); return q ? S.order.filter(f => f.filename.toLowerCase().includes(q)) : S.order; }
+function viewFilesAll() { if (!S.order) return []; const q = S.filter.trim().toLowerCase(); return q ? S.order.filter(f => f.filename.toLowerCase().includes(q)) : S.order; }
 function stepChange(d) {
   const el = $('#diff'), y = el.scrollTop;
   const anchors = [];
