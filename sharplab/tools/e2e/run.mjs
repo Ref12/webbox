@@ -146,6 +146,7 @@ metrics.verify = await page.evaluate(() => document.getElementById('verifyout').
   assert.equal(await page.evaluate(() => { const s = window.__sharplab.ed.getSel(); return window.__sharplab.state.code.slice(s.start, s.end); }), 'Holder', 'type name selects the type');
   const clsText = await page.locator('#layoutout .lcard').nth(1).innerText();
   assert.match(clsText, /object header/);
+  await page.screenshot({ path: path.join(docs, 'layout-measured.png') });
   await page.click('#layoutout .lmode button:nth-child(2)');
   await page.waitForFunction(() => /CoreCLR/.test(document.querySelector('#layoutout .lmode button.on').textContent));
   assert.match(await page.locator('#layoutout .lcard').nth(1).innerText(), /24 bytes|32 bytes/);
@@ -157,12 +158,11 @@ metrics.verify = await page.evaluate(() => document.getElementById('verifyout').
   assert.equal(await lp.page.evaluate(() => window.__sharplab.state.tab), 'layout', 'share link keeps the Layout tab');
   await lp.page.close();
 
-  await page.screenshot({ path: path.join(docs, 'layout-e2e.png') });
+  await page.screenshot({ path: path.join(docs, 'layout-modelled.png') });
   await page.click('#layoutout .lmode button:nth-child(1)');
 }
 
-// diagnostics: a language-version error shows up
- as a Monaco marker and in the problem list
+// diagnostics: a language-version error shows up as a Monaco marker and in the problem list
 await page.evaluate(() => window.__sharplab.setCode('record R(int A);\nclass P { static void Main() { int x = "s"; } }\n'));
 await page.waitForFunction(() => document.getElementById('problems').innerText.includes('CS0029'));
 const markers = await page.evaluate(() => window.monaco ? window.monaco.editor.getModelMarkers({}).filter((m) => m.owner === 'roslyn').map((m) => m.code) : []);
