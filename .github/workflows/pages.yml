@@ -141,6 +141,28 @@ jobs:
         run: |
           ilspy-src/ILSpy.Browser/build-static.sh "$PWD/_ilspy_pages" --target=pages
           ilspy-src/ILSpy.Browser/build-static.sh "$PWD/_ilspy_cf" --target=cloudflare --base=/ilspy --headers="$PWD/_ilspy_headers"
+      # --- MSBuild Structured Log Viewer in the browser (Avalonia, .NET WebAssembly): pinned commit of the fork ljcollins25/MSBuildStructuredLog (branch wasm), cached by the pin ---
+      - name: Cache the binlog viewer build
+        id: binlog-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            _binlog_pages
+            _binlog_cf
+            _binlog_headers
+          key: binlog-v1-9ce4bf5b8d941d10507a0f79a8927d87a3c861cb
+      - name: Check out MSBuildStructuredLog
+        if: steps.binlog-cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ljcollins25/MSBuildStructuredLog
+          ref: 9ce4bf5b8d941d10507a0f79a8927d87a3c861cb
+          path: binlog-src
+      - name: Build the binlog viewer
+        if: steps.binlog-cache.outputs.cache-hit != 'true'
+        run: |
+          binlog-src/src/StructuredLogViewer.Browser/build-static.sh "$PWD/_binlog_pages" --target=pages
+          binlog-src/src/StructuredLogViewer.Browser/build-static.sh "$PWD/_binlog_cf" --target=cloudflare --base=/binlog --headers="$PWD/_binlog_headers"
       # --- Roslyn Quoter (browser-only, .NET WebAssembly): built from a pinned commit of the fork ljcollins25/RoslynQuoter (branch browser), not copied ---
       # Cached by the pinned commit and webbox's shared build files (it builds with build/NoWorkloadWasm.*).
       - name: Cache the Roslyn Quoter build
@@ -162,7 +184,7 @@ jobs:
       - name: Stage the site
         run: |
           mkdir -p _site
-          rsync -a --exclude '.git' --exclude '.github' --exclude '_site' --exclude '/csharp' --exclude '/sharplab' --exclude '/ilspy-src' --exclude '/_ilspy_pages' --exclude '/_ilspy_cf' --exclude '/_ilspy_headers' --exclude '/quoter-src' --exclude '/quoter-dist' --exclude 'README.md' ./ _site/
+          rsync -a --exclude '.git' --exclude '.github' --exclude '_site' --exclude '/csharp' --exclude '/sharplab' --exclude '/ilspy-src' --exclude '/_ilspy_pages' --exclude '/_ilspy_cf' --exclude '/_ilspy_headers' --exclude '/quoter-src' --exclude '/quoter-dist' --exclude '/binlog-src' --exclude '/_binlog_pages' --exclude '/_binlog_cf' --exclude '/_binlog_headers' --exclude 'README.md' ./ _site/
           # csharp/ -> _site/csharp/: app files with content-hashed names, big binaries only as .br (decoded in the page; Pages cannot send Content-Encoding for them)
           node csharp/tools/stage.mjs csharp/dist/wwwroot _site/csharp --target=pages --aot=csharp/dist-aot/wwwroot
           # fuget: publish output replaces the copied sources
@@ -170,17 +192,20 @@ jobs:
           node sharplab/tools/stage.mjs sharplab/dist/wwwroot _site/sharplab --aot=sharplab/dist-aot/wwwroot
           mkdir -p _site/ilspy && cp -r _ilspy_pages/. _site/ilspy/
           rm -rf _site/quoter && cp -r quoter-dist _site/quoter
+          mkdir -p _site/binlog && cp -r _binlog_pages/. _site/binlog/
           touch _site/.nojekyll
       - name: Stage the Cloudflare site
         run: |
           # same apps, but csharp/ without .br files or decoder: the edge compresses; _headers gives COOP/COEP, caching and Content-Types
-          rsync -a --exclude '.git' --exclude '.github' --exclude '_site' --exclude '_cf_site' --exclude '/csharp' --exclude '/sharplab' --exclude '/ilspy-src' --exclude '/_ilspy_pages' --exclude '/_ilspy_cf' --exclude '/_ilspy_headers' --exclude '/quoter-src' --exclude '/quoter-dist' --exclude 'README.md' --exclude 'wrangler.jsonc' ./ _cf_site/
+          rsync -a --exclude '.git' --exclude '.github' --exclude '_site' --exclude '_cf_site' --exclude '/csharp' --exclude '/sharplab' --exclude '/ilspy-src' --exclude '/_ilspy_pages' --exclude '/_ilspy_cf' --exclude '/_ilspy_headers' --exclude '/quoter-src' --exclude '/quoter-dist' --exclude '/binlog-src' --exclude '/_binlog_pages' --exclude '/_binlog_cf' --exclude '/_binlog_headers' --exclude 'README.md' --exclude 'wrangler.jsonc' ./ _cf_site/
           node csharp/tools/stage.mjs csharp/dist/wwwroot _cf_site/csharp --target=cloudflare --mt=csharp/dist-mt/wwwroot --aot=csharp/dist-aot/wwwroot
           rm -rf _cf_site/fuget && mkdir -p _cf_site/fuget && cp -r fuget/dist/wwwroot/. _cf_site/fuget/
           node sharplab/tools/stage.mjs sharplab/dist/wwwroot _cf_site/sharplab --target=cloudflare --aot=sharplab/dist-aot/wwwroot
           mkdir -p _cf_site/ilspy && cp -r _ilspy_cf/. _cf_site/ilspy/
           cat _ilspy_headers >> _cf_site/_headers    # after csharp's stage.mjs wrote _headers
           rm -rf _cf_site/quoter && cp -r quoter-dist _cf_site/quoter
+          mkdir -p _cf_site/binlog && cp -r _binlog_cf/. _cf_site/binlog/
+          cat _binlog_headers >> _cf_site/_headers
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
