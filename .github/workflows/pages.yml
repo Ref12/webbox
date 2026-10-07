@@ -150,14 +150,14 @@ jobs:
             _binlog_pages
             _binlog_cf
             _binlog_headers
-          key: binlog-v1-24392b92dd4024ca7dc071e145ed64b08a22afbe
+          key: binlog-v1-d48bc31c7a6e5fd8b6c019473cc11c4883914e82
       - name: Check out MSBuildStructuredLog
         if: steps.binlog-cache.outputs.cache-hit != 'true'
         uses: actions/checkout@v4
         with:
           repository: ljcollins25/MSBuildStructuredLog
           fetch-depth: 0   # Nerdbank.GitVersioning computes the version from history; a shallow clone fails the build
-          ref: 24392b92dd4024ca7dc071e145ed64b08a22afbe
+          ref: d48bc31c7a6e5fd8b6c019473cc11c4883914e82
           path: binlog-src
       - name: Build the binlog viewer
         if: steps.binlog-cache.outputs.cache-hit != 'true'
