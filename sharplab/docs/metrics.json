@@ -1,109 +1,109 @@
 {
   "plain_gzipAll": {
     "cold": {
-      "firstViewMs": 4431,
+      "firstViewMs": 4379,
       "marks": {
-        "editorReady": 531,
-        "runtimeCreated": 1965,
-        "exportsReady": 1987,
-        "refsReady": 2180,
-        "firstView": 4431,
-        "firstCompileDone": 4432
+        "editorReady": 496,
+        "exec.runtimeCreated": 2033,
+        "exec.exportsReady": 2064,
+        "exec.refsReady": 2248,
+        "firstView": 4379,
+        "firstCompileDone": 4379
       },
       "wireBytes": {
-        "framework": 14259343,
+        "framework": 14366132,
         "ref": 582481,
-        "app": 15368,
+        "app": 41453,
         "cdn": 1111045,
-        "files": 199
+        "files": 215
       }
     }
   },
   "shipped": {
     "cold": {
-      "firstViewMs": 4267,
+      "firstViewMs": 4008,
       "marks": {
-        "editorReady": 543,
-        "runtimeCreated": 1778,
-        "exportsReady": 1803,
-        "refsReady": 1993,
-        "firstView": 4267,
-        "firstCompileDone": 4268
+        "editorReady": 533,
+        "exec.runtimeCreated": 1769,
+        "exec.exportsReady": 1800,
+        "exec.refsReady": 1959,
+        "firstView": 4008,
+        "firstCompileDone": 4008
       },
       "wireBytes": {
-        "framework": 11261004,
-        "ref": 502029,
-        "app": 226590,
+        "framework": 11474829,
+        "ref": 710958,
+        "app": 4700583,
         "cdn": 1111045,
-        "files": 206
+        "files": 261
       },
-      "wireBytesEncodedBody": 11907862,
+      "wireBytesEncodedBody": 11998905,
       "coreBundle": {
         "bytes": 1204157,
         "from": "network",
-        "ms": 34
+        "ms": 21
       },
       "compiles": [
         {
-          "ms": 1699,
-          "coreMs": 1576,
+          "ms": 1542,
+          "coreMs": 1429,
           "bytes": 3584
         }
       ]
     },
     "warm": {
-      "firstViewMs": 3439,
+      "firstViewMs": 3534,
       "marks": {
-        "editorReady": 481,
-        "runtimeCreated": 956,
-        "exportsReady": 975,
-        "refsReady": 1160,
-        "firstView": 3439,
-        "firstCompileDone": 3439
+        "editorReady": 548,
+        "exec.runtimeCreated": 1149,
+        "exec.exportsReady": 1190,
+        "exec.refsReady": 1352,
+        "firstView": 3534,
+        "firstCompileDone": 3535
       },
       "coreBundle": {
         "bytes": 1204157,
         "from": "cache",
-        "ms": 19
+        "ms": 4
       }
     }
   },
-  "verify": "✔ All methods verified.  (8 ms, ILVerify)",
+  "verify": "✔ All methods verified.  (32 ms, ILVerify)",
   "shareLinkLength": 197,
-  "jitEndpointMs": 211,
   "compileMsLast5": [
     {
-      "ms": 39,
-      "coreMs": 13,
-      "bytes": 2560
-    },
-    {
-      "ms": 19,
+      "ms": 17,
       "coreMs": 16,
       "bytes": 2560
     },
     {
-      "ms": 16,
-      "coreMs": 14,
+      "ms": 22,
+      "coreMs": 19,
       "bytes": 2560
     },
     {
-      "ms": 229,
-      "coreMs": 210,
+      "ms": 33,
+      "coreMs": 31,
+      "bytes": 2560
+    },
+    {
+      "ms": 162,
+      "coreMs": 161,
       "bytes": 6656
     },
     {
-      "ms": 93,
-      "coreMs": 87,
+      "ms": 362,
+      "coreMs": 88,
       "bytes": 6656
     }
   ],
   "viewMs": {
-    "cs": 446,
-    "il": 2,
-    "syntax": 12,
+    "cs": 349,
+    "il": 3,
+    "syntax": 10,
     "run": 0,
-    "verify": 5,
+    "verify": 9,
+    "layout": 4,
     "jit": 0
   }
 }

@@ -39,6 +39,8 @@ public static partial class Interop
     [JSExport] public static string Decompile(int level) => Pg.Decompile(level);
     [JSExport] public static Task<string> Run() => Pg.RunAsync();
     [JSExport] public static string Verify() => Pg.Verify();
+    /// <summary>Layout view: JSON of the measured (this runtime) and modelled (CoreCLR x64) layout of every type in the last compiled code.</summary>
+    [JSExport] public static string Layout() => Pg.Layout();
     /// <summary>The last compiled assembly, base64 (for the JIT tab's remote endpoint).</summary>
     [JSExport] public static string AssemblyBase64() => Pg.AssemblyBase64();
 

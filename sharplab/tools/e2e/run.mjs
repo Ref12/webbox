@@ -129,6 +129,39 @@ await tab('verify');
 await page.waitForFunction(() => document.getElementById('verifyout').innerText.includes('All methods verified'), null, { timeout: 30000 });
 metrics.verify = await page.evaluate(() => document.getElementById('verifyout').innerText);
 
+// Layout tab: measured (page runtime) and modelled (CoreCLR) tables; clicking a field / type name selects it in the editor; the share link keeps the choice
+{
+  const src = 'struct MyStruct { public bool flag; public long big; }\nclass Holder { public byte b; public string name; }\n';
+  await page.evaluate((c) => window.__sharplab.setCode(c), src);
+  await page.waitForFunction(() => window.__sharplab.last?.success);
+  await tab('layout');
+  await page.waitForFunction(() => document.querySelectorAll('#layoutout .lcard').length >= 2, null, { timeout: 30000 });
+  const text = await page.locator('#layoutout').innerText();
+  assert.match(text, /ObjectLayoutInspector/); assert.match(text, /MyStruct/); assert.match(text, /padding/);
+  const cell = (n) => page.locator('#layoutout .lcard').first().locator('tr.field', { hasText: n });
+  assert.match(await page.locator('#layoutout .lcard').first().innerText(), /16 bytes/);   // bool+long: 16 on Mono wasm32 and CoreCLR x64 alike
+  await cell('big').click();
+  assert.deepEqual(await page.evaluate(() => { const s = window.__sharplab.ed.getSel(); return window.__sharplab.state.code.slice(s.start, s.end); }), 'big', 'field row selects its name in the editor');
+  await page.locator('#layoutout .lcard').nth(1).locator('.tn').click();
+  assert.equal(await page.evaluate(() => { const s = window.__sharplab.ed.getSel(); return window.__sharplab.state.code.slice(s.start, s.end); }), 'Holder', 'type name selects the type');
+  const clsText = await page.locator('#layoutout .lcard').nth(1).innerText();
+  assert.match(clsText, /object header/);
+  await page.screenshot({ path: path.join(docs, 'layout-measured.png') });
+  await page.click('#layoutout .lmode button:nth-child(2)');
+  await page.waitForFunction(() => /CoreCLR/.test(document.querySelector('#layoutout .lmode button.on').textContent));
+  assert.match(await page.locator('#layoutout .lcard').nth(1).innerText(), /24 bytes|32 bytes/);
+  await page.evaluate(() => { window.__lastShare = undefined; });
+  await page.click('#share');
+  await page.waitForFunction(() => window.__lastShare);
+  const lurl = await page.evaluate(() => window.__lastShare);
+  const lp = await load(ctx, 8125, lurl.slice(lurl.indexOf('#')));
+  assert.equal(await lp.page.evaluate(() => window.__sharplab.state.tab), 'layout', 'share link keeps the Layout tab');
+  await lp.page.close();
+
+  await page.screenshot({ path: path.join(docs, 'layout-modelled.png') });
+  await page.click('#layoutout .lmode button:nth-child(1)');
+}
+
 // diagnostics: a language-version error shows up as a Monaco marker and in the problem list
 await page.evaluate(() => window.__sharplab.setCode('record R(int A);\nclass P { static void Main() { int x = "s"; } }\n'));
 await page.waitForFunction(() => document.getElementById('problems').innerText.includes('CS0029'));

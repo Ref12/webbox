@@ -30,6 +30,7 @@
       <button role="tab" data-tab="il">IL</button>
       <button role="tab" data-tab="cs" class="on">C#</button>
       <button role="tab" data-tab="run">Run</button>
+      <button role="tab" data-tab="layout">Layout</button>
       <button role="tab" data-tab="verify">Verify</button>
       <button role="tab" data-tab="jit">JIT asm</button>
       <span id="levelwrap" class="level"><label>Decompile <select id="level" title="How high-level the decompiled C# is">
@@ -43,6 +44,7 @@
         <div class="bar"><button id="runbtn" disabled>&#9654; Run</button><span id="runinfo" class="dim"></span></div>
         <pre id="runout" class="runout"></pre>
       </div>
+      <div class="pane" id="pane-layout"><div id="layoutout" class="layout"></div></div>
       <div class="pane" id="pane-verify"><div id="verifyout" class="verify"></div></div>
       <div class="pane" id="pane-jit"><div id="jit" class="jit"></div></div>
     </div>

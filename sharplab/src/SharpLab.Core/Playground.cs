@@ -14,6 +14,7 @@ public sealed class Playground
     public RefResolver? Resolver { get; set; }
     private CompileResult? _last;
     private Settings _settings = new();
+    private string _code = "";
 
     public static Settings ParseSettings(string? json) =>
         string.IsNullOrWhiteSpace(json) ? new Settings() : JsonSerializer.Deserialize<Settings>(json, Json) ?? new Settings();
@@ -21,6 +22,7 @@ public sealed class Playground
     public async Task<string> CompileAsync(string code, string settingsJson)
     {
         _settings = ParseSettings(settingsJson);
+        _code = code;
         _last = await Compiler.CompileAsync(code, _settings, Refs, Resolver);
         return JsonSerializer.Serialize(new { success = _last.Success, isExe = _last.IsExe, ms = _last.Milliseconds, loaded = _last.Loaded, diagnostics = _last.Diagnostics, size = _last.Assembly?.Length ?? 0 }, Json);
     }
@@ -45,6 +47,8 @@ public sealed class Playground
 
     public string Verify() => JsonSerializer.Serialize(Assembly is { } a ? IlVerifier.Verify(a, Refs)
         : new VerifyResult(true, false, Array.Empty<string>(), "Fix the compile errors first.", 0), Json);
+
+    public string Layout() => LayoutView.Json(Assembly, _code);
 
     public string AssemblyBase64() => Assembly is { } a ? Convert.ToBase64String(a) : "";
 
