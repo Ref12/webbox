@@ -5,7 +5,7 @@ import { encodeShare, decodeShare, DEFAULTS, toBase64Url, fromBase64Url, deflate
 const code = 'using System;\nclass A { static void Main() { Console.WriteLine("héllo \u{1F600}"); } }\r\n';
 
 test('round trip keeps code and options, including unicode and CRLF', async () => {
-  const st = { code, configuration: 'debug', optimize: false, langVersion: '12', level: 3, tab: 'il' };
+  const st = { code, configuration: 'debug', optimize: false, langVersion: '12', level: 3, tab: 'layout', layoutRuntime: 'modelled' };
   const frag = await encodeShare(st);
   assert.match(frag, /^v1:[A-Za-z0-9_-]+$/);
   assert.deepEqual(await decodeShare('#' + frag), st);
@@ -43,5 +43,5 @@ test('base64url helpers round trip every byte value', () => {
 test('a link made by an earlier build still decodes (format pinned)', async () => {
   // v1 of the format; if this fails the format changed and old links broke
   const st = await decodeShare('v1:q1ZKVrJSSs5JLC5WcFSoVqiNyVPSUUpXslJKSU0qTVfSUUpRsjKuBQA');
-  assert.deepEqual(st, { code: 'class A { }\n', configuration: 'debug', optimize: true, langVersion: 'latest', level: 3, tab: 'cs' });
+  assert.deepEqual(st, { code: 'class A { }\n', configuration: 'debug', optimize: true, langVersion: 'latest', level: 3, tab: 'cs', layoutRuntime: 'measured' });
 });

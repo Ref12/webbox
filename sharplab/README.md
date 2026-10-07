@@ -81,3 +81,12 @@ New here: everything else (`Compiler`, `SyntaxTreeModel`, `Views` (IL/C#), `Runn
 * Not trimmed, no AOT, no threads: native relinking/AOT would shrink the payload and speed Roslyn up, but they need the wasm-tools workload's packs; carry on without them until the no-workload AOT setup (another session) lands.
 * Run uses non-collectible `AssemblyLoadContext`s on wasm (collectible ones are not supported): each Run leaks its small assembly until reload.
 * The syntax tree is capped at 60 000 elements; very large inputs are slow to render.
+
+
+## Layout tab (ObjectLayoutInspector-style)
+
+The **Layout** tab lists every class/struct declared in the code (generics instantiated with `int`/`string`) with offsets, sizes, padding (and why), object header + method table for classes, nested struct expansion, and a proportional bar. Clicking a field (row or bar segment) or the type name selects it in the editor. It recomputes with each compile; the share link keeps the tab and the measured/modelled choice.
+
+* **Measured** (default): read from the runtime running the page, i.e. Mono wasm32, with `ldflda`/`sizeof` in DynamicMethods (works in the interpreter build; `DynamicCode` is supported but not compiled) and the allocator for class sizes (`LayoutMeasure.cs`). Mono is 32-bit, so pointers are 4 bytes and the object overhead is vtable + sync word.
+* **CoreCLR x64 (modelled)**: computed from metadata by `ClrLayout.cs` (sequential/auto/explicit, Pack, Size, reordering of references first then by size, derived-class gap filling). Checked against the real CoreCLR in `tests/SharpLab.Tests/LayoutTests.cs`; Vector128/256 and InlineArray special cases are known gaps in the model.
+* Credit: the idea and the table format come from [ObjectLayoutInspector](https://github.com/SergeyTeplyakov/ObjectLayoutInspector) by Sergey Teplyakov (MIT, Copyright (c) Sergey Teplyakov). No code was copied; the library itself needs `Reflection.Emit` details beyond what we rely on, so this is a re-implementation of the approach.

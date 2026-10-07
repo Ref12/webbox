@@ -1,7 +1,7 @@
 // Share links: the code and the options are packed into the URL fragment, like SharpLab's (#v2:...), but with the platform's
 // CompressionStream (raw deflate) + base64url instead of lz-string. Only options that differ from the defaults are stored.
 // Fragment format:  v1:<base64url(deflate-raw(JSON))>   JSON = { c: code, g?: config, o?: 0|1 optimize, l?: langVersion, d?: decompile level, t?: tab }
-export const DEFAULTS = Object.freeze({ code: '', configuration: 'release', optimize: true, langVersion: 'latest', level: 2, tab: 'cs' });
+export const DEFAULTS = Object.freeze({ code: '', configuration: 'release', optimize: true, langVersion: 'latest', level: 2, tab: 'cs', layoutRuntime: 'measured' });
 export const PREFIX = 'v1:';
 
 async function pipe(bytes, stream) {
@@ -32,6 +32,7 @@ export async function encodeShare(state) {
   if (s.langVersion !== DEFAULTS.langVersion) o.l = s.langVersion;
   if (s.level !== DEFAULTS.level) o.d = s.level;
   if (s.tab !== DEFAULTS.tab) o.t = s.tab;
+  if (s.layoutRuntime === 'modelled') o.m = 'c';   // Layout view: CoreCLR (modelled) instead of the page's runtime (measured)
   return PREFIX + toBase64Url(await deflate(new TextEncoder().encode(JSON.stringify(o))));
 }
 
@@ -50,6 +51,7 @@ export async function decodeShare(fragment) {
       langVersion: typeof o.l === 'string' ? o.l : DEFAULTS.langVersion,
       level,
       tab: typeof o.t === 'string' ? o.t : DEFAULTS.tab,
+      layoutRuntime: o.m === 'c' ? 'modelled' : 'measured',
     };
   } catch { return null; }
 }

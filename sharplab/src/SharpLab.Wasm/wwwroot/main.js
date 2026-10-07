@@ -1,6 +1,7 @@
 import { encodeShare, decodeShare, DEFAULTS } from './share.js';
 import { findPath, nodeAt, selectionOf, label } from './syntaxpath.js';
 import { renderJit } from './jit.js';
+import { renderLayout } from './layout.js';
 import { RuntimeClient } from './protocol.js';
 import { registerRoslyn } from './roslyn-monaco.js';
 import { VS_DARK } from './classify.js';
@@ -234,7 +235,13 @@ async function main() {
       box.appendChild(head);
       for (const e of v.errors) { const d = document.createElement('div'); d.className = 'bad'; d.textContent = '  ' + e; box.appendChild(d); }
     } else if (tab === 'run') { $('runbtn').disabled = !last?.success; $('runinfo').textContent = last?.success ? (last.isExe ? 'Compiled ' + last.size + ' bytes. Press Run.' : 'A library: nothing to run.') : 'Fix the errors first.'; }
-    else if (tab === 'jit') renderJit($('jit'), { getAssemblyBase64: () => exec.request('assemblyBase64'), compiled: () => last, settings: () => ({ ...state }) });
+    else if (tab === 'layout') {
+      const data = JSON.parse(await exec.request('layout'));
+      state.layoutRuntime ||= 'measured';
+      renderLayout($('layoutout'), data, state, (s) => { if (s.span) { ed.setSel(s.span[0], s.span[1]); ed.focus(); } });
+    }
+    else if (tab === 'jit') renderJit(
+$('jit'), { getAssemblyBase64: () => exec.request('assemblyBase64'), compiled: () => last, settings: () => ({ ...state }) });
     rendered[tab] = key;
     (metrics.views ||= {})[tab] = Math.round(performance.now() - t);
   }
