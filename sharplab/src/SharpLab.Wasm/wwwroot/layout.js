@@ -50,7 +50,7 @@ function table(l, select) {
 export function renderLayout(host, data, state, select) {
   host.textContent = '';
   const intro = el('div', 'lintro');
-  intro.append('Memory layout of every type in your code. ', el('b', '', 'Measured'), ' = read from the runtime running this page (' + data.runtimeName + ', ' + data.pointerSize * 8 + '-bit); ', el('b', '', 'CoreCLR x64'), ' = what the desktop .NET runtime does, computed from the type metadata (a model: Mono lays out some types differently). Format and idea: ');
+  intro.append('Memory layout of every type in your code. ', el('b', '', 'Measured'), ' = read from the runtime running this page (' + data.runtimeName + ', ' + data.pointerSize * 8 + '-bit); ', el('b', '', 'CoreCLR x64'), ' = what the desktop .NET runtime does, computed from the type metadata (a model: Mono lays out some types differently, and the model can differ from the real runtime, mostly for large nested structs, Int128/Vector fields and Pack on derived classes). Format and idea: ');
   const a = el('a', '', 'ObjectLayoutInspector'); a.href = 'https://github.com/SergeyTeplyakov/ObjectLayoutInspector'; a.target = '_blank'; a.rel = 'noopener'; intro.append(a, ' (MIT, © Sergey Teplyakov).');
   host.appendChild(intro);
   const mode = el('div', 'lmode');

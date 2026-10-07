@@ -159,7 +159,7 @@ public sealed class ClrLayout
         var infos = own.Select(f => (f, info: InfoOf(f.FieldType))).ToList();
         foreach (var x in infos) p.HasObjRef |= x.info.HasObjRef;
         // a type with object references is laid out like Auto, whatever it asks for (CoreCLR ignores Sequential and Pack for non-blittable types)
-        bool reorder = kind == LayoutKind.Auto || (kind == LayoutKind.Sequential && infos.Any(x => x.info.HasObjRef));
+        bool reorder = kind == LayoutKind.Auto || (kind == LayoutKind.Sequential && p.HasObjRef);   // p.HasObjRef includes the base class
         int maxAlign = 1;
 
         if (kind == LayoutKind.Explicit)
@@ -194,6 +194,8 @@ public sealed class ClrLayout
         }
         // CoreCLR caps the alignment of a reordered struct that holds object references at the pointer size (an Int128 inside still sits at 16)
         if (!isClass && reorder && p.HasObjRef) maxAlign = Math.Min(maxAlign, Ptr);
+        // an auto-layout struct is rounded up to pointer size
+        if (!isClass && kind == LayoutKind.Auto && infos.Any(x => x.f.FieldType.IsValueType && !x.f.FieldType.IsPrimitive && !x.f.FieldType.IsEnum && x.info.Size >= 8)) maxAlign = Math.Max(maxAlign, Ptr);
         p.Align = maxAlign;
         if (!isClass)
         {
@@ -218,8 +220,9 @@ public sealed class ClrLayout
         int maxA = maxAlign, cur = pos;
         void Put((FieldInfo f, Info info) x)
         {
-            cur = AlignUp(cur, x.info.Align);
-            p.Fields.Add(new Placed(x.f, t, x.f.FieldType, cur, x.info.Size, x.info.Align, x.info.HasObjRef, null));
+            int al = x.info.Align;
+            cur = AlignUp(cur, al);
+            p.Fields.Add(new Placed(x.f, t, x.f.FieldType, cur, x.info.Size, al, x.info.HasObjRef, null));
             cur += x.info.Size; maxA = Math.Max(maxA, x.info.Align);
         }
         foreach (var key in new[] { 0, 8, 4, 2, 1, -1 })

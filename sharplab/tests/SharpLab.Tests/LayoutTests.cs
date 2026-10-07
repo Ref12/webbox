@@ -111,4 +111,33 @@ public class LayoutTests
         var r = JsonSerializer.Deserialize<LayoutResult>(p.Layout(), Playground.Json)!;
         Assert.False(r.Available); Assert.Empty(r.Types);
     }
+
+    // ---- edge types ----
+    [Fact] public async Task RefStructIsListedAsRefStruct()
+    {
+        var (e, m, _) = await One("using System; ref struct R { public Span<byte> s; public int i; }", "R");
+        Assert.Equal("ref struct", m.Kind);
+        Assert.Equal("s@0/16 i@16/4 pad@20/4", Rows(m)); Assert.Equal(24, m.Size);
+    }
+
+    [Fact] public void PointerFieldsAreEightBytesAndNotReferences() =>
+        Both("unsafe struct P { public byte b; public byte* p; public delegate*<void> f; }", "P", "b@0/1 pad@1/7 p@8/8 f@16/8", 24, 7);
+
+    [Fact] public void FrameworkStructsKeepTheirSize()
+    {
+        var r = Layout("using System; struct F { public byte b; public DateTime d; public Guid g; public int? n; public (byte, long) t; public decimal m; }").GetAwaiter().GetResult();
+        var m = r.Types.Single(x => x.Name == "F").Modelled!;
+        var sizes = m.Slots.Where(s => s.Kind == "field").ToDictionary(s => s.Name!, s => s.Size);
+        Assert.Equal(8, sizes["d"]); Assert.Equal(16, sizes["g"]); Assert.Equal(8, sizes["n"]); Assert.Equal(16, sizes["t"]); Assert.Equal(16, sizes["m"]);
+        Assert.Contains(m.Slots, s => s.Name == "g" && s.Offset == 16);   // DateTime (8-aligned) comes first, Guid (4-aligned) follows it
+        if (IntPtr.Size == 8) { var meas = r.Types.Single(x => x.Name == "F").Measured!; Assert.Equal(Rows(m), Rows(meas)); Assert.Equal(m.Size, meas.Size); }
+    }
+
+    [Fact] public void NullableAndTupleAreExpandedOnlyWhenDeclaredInTheCode()
+    {
+        var r = Layout("struct N { public int? a; public (int, int) b; }").GetAwaiter().GetResult();
+        var m = r.Types.Single(x => x.Name == "N").Modelled!;
+        Assert.Equal(16, m.Size);
+        Assert.Contains(m.Notes, n => n.Contains("framework", StringComparison.OrdinalIgnoreCase));
+    }
 }
