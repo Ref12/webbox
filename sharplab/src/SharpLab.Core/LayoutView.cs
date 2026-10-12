@@ -20,7 +20,21 @@ public sealed record LayoutEntry
     public string? Error { get; init; }
 }
 
-public sealed record LayoutResult(bool Available, string Note, string RuntimeName, int PointerSize, List<LayoutEntry> Types);
+/// <summary>A type the picker offers: Name as shown, Ref as the resolver reads it back, Span the declaration in the code (null for framework types).</summary>
+public sealed record DeclaredType(string Name, string Ref, string Kind, int[]? Span);
+
+/// <summary>
+/// Types: the laid-out types (all declared ones when no selection was asked for; otherwise just the selected one).
+/// Declared: what the picker lists. Selected: the Ref of the type shown. Error / ResolveNote: why a typed name could not be resolved / how a generic name was closed.
+/// </summary>
+public sealed record LayoutResult(bool Available, string Note, string RuntimeName, int PointerSize, List<LayoutEntry> Types)
+{
+    public List<DeclaredType> Declared { get; init; } = new();
+    public string? Selected { get; init; }
+    public string? Error { get; init; }
+    public string? ResolveNote { get; init; }
+}
+
 
 /// <summary>
 /// Layout view: loads the compiled assembly (as Run does), lists the instance types declared in it (generic ones instantiated with int / string where the constraints allow),
@@ -30,34 +44,54 @@ public static class LayoutView
 {
     public static string Runtime => LayoutMeasure.RuntimeName + " " + (LayoutMeasure.PointerSize * 8 == 32 ? "wasm32" : "x" + LayoutMeasure.PointerSize * 8);
 
-    public static LayoutResult Build(byte[]? assembly, string code)
+    /// <param name="typeText">null: lay out every declared type. "": the first declared type. Otherwise a type name (user, framework, generic) to resolve and lay out.</param>
+    public static LayoutResult Build(byte[]? assembly, string code, string? typeText = null, IEnumerable<string>? refNames = null)
     {
         string rt = LayoutMeasure.RuntimeName;
         if (assembly is null) return new(false, "Fix the compile errors first.", rt, LayoutMeasure.PointerSize, new());
         Assembly asm;
-        try
-        {
-            AssemblyLoadContext alc;
-            try { alc = new AssemblyLoadContext("sharplab-layout-" + Guid.NewGuid().ToString("N")); } catch (PlatformNotSupportedException) { alc = AssemblyLoadContext.Default; }
-            asm = alc.LoadFromStream(new MemoryStream(assembly));
-        }
+        try { asm = Load(assembly); }
         catch (Exception e) { return new(false, "Could not load the assembly: " + e.Message, rt, LayoutMeasure.PointerSize, new()); }
 
         var spans = SpanIndex.Build(code);
         Type[] types;
         try { types = asm.GetTypes(); } catch (ReflectionTypeLoadException e) { types = e.Types.Where(t => t is not null).ToArray()!; }
-        var list = new List<LayoutEntry>();
-        foreach (var def in types.OrderBy(t => t.MetadataToken))
+        var used = TypeResolver.Used(asm, code);
+        var declaredTypes = new List<Type>();
+        foreach (var def in types.OrderBy(t => spans.TypeSpan(t)?[0] ?? int.MaxValue).ThenBy(t => t.MetadataToken))   // source order
         {
             if (!Wanted(def)) continue;
-            foreach (var t in Instances(def)) list.Add(Entry(t, spans));
+            declaredTypes.AddRange(Instances(def, used));
         }
-        return new(true, list.Count == 0 ? "No class or struct with instance fields is declared in this code." : "", rt, LayoutMeasure.PointerSize, list);
+        var declared = declaredTypes.Select(t => new DeclaredType(TypeNames.Of(t), TypeNames.Ref(t) ?? TypeNames.Of(t), ClrLayout.KindOf(t), spans.TypeSpan(t))).ToList();
+        string empty = declared.Count == 0 ? "No class or struct with instance fields is declared in this code: type a type name such as System.Guid." : "";
+        if (typeText is null) return new(true, empty, rt, LayoutMeasure.PointerSize, declaredTypes.Select(t => Entry(t, spans, asm)).ToList()) { Declared = declared };
+        if (typeText.Length == 0)
+        {
+            if (declaredTypes.Count == 0) return new(true, empty, rt, LayoutMeasure.PointerSize, new()) { Declared = declared };
+            return new(true, "", rt, LayoutMeasure.PointerSize, new() { Entry(declaredTypes[0], spans, asm) }) { Declared = declared, Selected = declared[0].Ref };
+        }
+        var r = TypeResolver.Resolve(typeText, asm, code, refNames);
+        if (r.Type is null) return new(true, "", rt, LayoutMeasure.PointerSize, new()) { Declared = declared, Error = r.Error };
+        return new(true, "", rt, LayoutMeasure.PointerSize, new() { Entry(r.Type, spans, asm) }) { Declared = declared, Selected = TypeNames.Ref(r.Type) ?? typeText.Trim(), ResolveNote = r.Note };
     }
 
-    public static string Json(byte[]? assembly, string code) => JsonSerializer.Serialize(Build(assembly, code), Playground.Json);
+    public static string Json(byte[]? assembly, string code, string? typeText = null, IEnumerable<string>? refNames = null) => JsonSerializer.Serialize(Build(assembly, code, typeText, refNames), Playground.Json);
 
-    private static bool Wanted(Type t)
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<byte[], Assembly> Loaded = new();
+    /// <summary>The compiled assembly loaded into its own context (once per compile result).</summary>
+    public static Assembly Load(byte[] assembly)
+    {
+        if (Loaded.TryGetValue(assembly, out var done)) return done;
+        AssemblyLoadContext alc;
+        try { alc = new AssemblyLoadContext("sharplab-layout-" + Guid.NewGuid().ToString("N")); } catch (PlatformNotSupportedException) { alc = AssemblyLoadContext.Default; }
+        var asm = alc.LoadFromStream(new MemoryStream(assembly));
+        Loaded.AddOrUpdate(assembly, asm);
+        return asm;
+    }
+
+    public static bool Wanted(Type t)
+
     {
         if (t.IsInterface || t.IsEnum || t.IsPointer || t.IsByRef || t.IsAbstract && t.IsSealed) return false;   // static classes are abstract sealed
         if (typeof(Delegate).IsAssignableFrom(t)) return false;
@@ -67,9 +101,10 @@ public static class LayoutView
         return true;
     }
 
-    private static IEnumerable<Type> Instances(Type def)
+    private static IEnumerable<Type> Instances(Type def, Dictionary<Type, List<Type>> used)
     {
         if (!def.IsGenericTypeDefinition) { yield return def; yield break; }
+        if (used.TryGetValue(def, out var closed) && closed.Count > 0) { foreach (var c in closed.Take(3)) yield return c; yield break; }
         var tried = new HashSet<string>();
         foreach (var arg in new[] { typeof(int), typeof(string), typeof(object) })
         {
@@ -79,8 +114,10 @@ public static class LayoutView
         }
     }
 
-    private static LayoutEntry Entry(Type t, SpanIndex spans)
+    private static LayoutEntry Entry(Type t, SpanIndex spans, Assembly user)
     {
+        bool mine = t.Assembly == user;
+        if (!mine) spans = SpanIndex.Empty;
         var span = spans.TypeSpan(t);
         TypeLayout? meas = null, model = null; string? err = null;
         try { meas = Measure(t, spans); } catch (Exception e) { err = "Measuring on this runtime failed: " + e.GetType().Name + ": " + e.Message; }
@@ -88,6 +125,7 @@ public static class LayoutView
         {
             model = ClrLayout.Compute(t);
             model = model with { Slots = Annotate(model.Slots, t, spans) };
+            if (!mine && ClrLayout.IsFramework(t)) model = model with { Notes = model.Notes.Append("A framework type: its fields are read from the types this browser runtime loaded, so the real CoreCLR layout may differ.").ToList() };
         }
         catch (Exception e) { err = (err is null ? "" : err + " ") + "Modelling CoreCLR failed: " + e.GetType().Name + ": " + e.Message; }
         return new LayoutEntry
@@ -122,7 +160,7 @@ public static class LayoutView
             if (ft.IsValueType && !ft.IsPrimitive && !ft.IsEnum && LayoutMeasure.InstanceFields(ft).Count > 0 && ft.Assembly == t.Assembly)
                 nested = ClrLayout.Shift(Measure(ft, spans).Slots, off);
             bool isRef = !ft.IsValueType && !ft.IsPointer;
-            placed.Add(new SlotBuilder.Placed(f.Name, TypeNames.Of(ft), TypeNames.Full(f.DeclaringType!), off, size, Math.Min(Math.Max(size, 1), isRef ? ptr : 8), isRef, nested));
+            placed.Add(new SlotBuilder.Placed(f.Name, TypeNames.Of(ft), TypeNames.Full(f.DeclaringType!), off, size, Math.Min(Math.Max(size, 1), isRef ? ptr : 8), isRef, nested, null, TypeNames.Ref(ft)));
             end = Math.Max(end, off + size);
         }
         int overhead = isClass ? LayoutMeasure.ObjectOverhead : 0;
@@ -152,6 +190,7 @@ public static class LayoutView
 public sealed class SpanIndex
 {
     private readonly Dictionary<string, int[]> _types = new(), _fields = new();
+    public static SpanIndex Empty { get; } = new();
 
     public static SpanIndex Build(string code)
     {

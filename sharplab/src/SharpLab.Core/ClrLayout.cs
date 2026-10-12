@@ -44,7 +44,7 @@ public sealed class ClrLayout
     {
         var p = PlaceOf(t);
         bool isClass = !t.IsValueType;
-        var placed = p.Fields.Select(f => new SlotBuilder.Placed(f.Field.Name, TypeNames.Of(f.FieldType), TypeNames.Full(f.Declaring), f.Offset, f.Size, f.Align, f.IsRef, NestedRows(f), f.Note)).ToList();
+        var placed = p.Fields.Select(f => new SlotBuilder.Placed(f.Field.Name, TypeNames.Of(f.FieldType), TypeNames.Full(f.Declaring), f.Offset, f.Size, f.Align, f.IsRef, NestedRows(f), f.Note, TypeNames.Ref(f.FieldType))).ToList();
         int area = isClass ? Math.Max(AlignUp(p.End, Ptr), Ptr) : p.Size;
         var (slots, pad) = SlotBuilder.Build(placed, area, p.Layout == "explicit", isClass, t.Name,
             isClass ? (p.Fields.Count == 0 ? "the minimum object size is 24 bytes" : null) : p.SizeNote, isClass ? Ptr : p.Align, Ptr);
@@ -267,5 +267,17 @@ public static class TypeNames
         if (t.IsNested && !t.IsGenericParameter) n = Of(t.DeclaringType!).Split('<')[0] + "." + n;
         return n;
     }
-    public static string Full(Type t) => (t.IsGenericType && !t.IsGenericTypeDefinition ? t.GetGenericTypeDefinition() : t).FullName ?? t.Name;
+    /// <summary>The name of a type as the Layout picker can resolve it again: namespace-qualified, generics closed with qualified arguments; null for pointers, arrays and open generics.</summary>
+    public static string? Ref(Type t)
+    {
+        if (t.IsByRef || t.IsPointer || t.IsFunctionPointer || t.IsArray || t.IsGenericParameter || t.ContainsGenericParameters) return null;
+        if (t.IsNested && t.DeclaringType!.IsGenericType) return null;
+        var def = t.IsGenericType ? t.GetGenericTypeDefinition() : t;
+        string n = System.Text.RegularExpressions.Regex.Replace((def.FullName ?? def.Name).Replace('+', '.'), "`\\d+", "");
+        if (!t.IsGenericType) return n;
+        var args = t.GetGenericArguments().Select(Ref).ToList();
+        return args.Any(a => a is null) ? null : n + "<" + string.Join(",", args) + ">";
+    }
+    public static string Full(Type t) =>
+ (t.IsGenericType && !t.IsGenericTypeDefinition ? t.GetGenericTypeDefinition() : t).FullName ?? t.Name;
 }

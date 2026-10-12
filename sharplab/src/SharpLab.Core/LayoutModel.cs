@@ -12,6 +12,8 @@ public sealed record LayoutSlot
     public int Size { get; init; }
     public string? Name { get; init; }
     public string? Type { get; init; }
+    /// <summary>The field type as a name the picker can resolve (<c>System.Guid</c>, <c>System.Collections.Generic.List&lt;System.Int32&gt;</c>); null for pointers, arrays and the like.</summary>
+    public string? TypeRef { get; init; }
     /// <summary>The type that declares the field (differs from the laid-out type for inherited fields); <c>Namespace.Outer+Inner</c>.</summary>
     public string? Declaring { get; init; }
     public bool IsRef { get; init; }
@@ -55,7 +57,7 @@ public sealed record TypeLayout
 /// <summary>Builds the rows of a layout table from placed fields: finds gaps and says where each comes from.</summary>
 public static class SlotBuilder
 {
-    public sealed record Placed(string Name, string TypeName, string Declaring, int Offset, int Size, int Align, bool IsRef, List<LayoutSlot>? Nested, string? Note = null);
+    public sealed record Placed(string Name, string TypeName, string Declaring, int Offset, int Size, int Align, bool IsRef, List<LayoutSlot>? Nested, string? Note = null, string? TypeRef = null);
 
     /// <summary>Rows (without the class header) and the padding total. <paramref name="size"/> is the size of the field area (struct size / data size of a class).</summary>
     public static (List<LayoutSlot> slots, int paddings) Build(IReadOnlyList<Placed> fields, int size, bool explicitLayout, bool isClass, string typeName, string? sizeNote, int tailAlign, int pointerSize)
@@ -84,7 +86,7 @@ public static class SlotBuilder
         {
             bool overlap = f.Offset < end;
             if (!overlap) Gap(end, f.Offset, prev, f, false);
-            slots.Add(new LayoutSlot { Kind = "field", Offset = f.Offset, Size = f.Size, Name = f.Name, Type = f.TypeName, Declaring = f.Declaring, IsRef = f.IsRef, Overlap = overlap, Align = f.Align, Nested = f.Nested, Note = f.Note });
+            slots.Add(new LayoutSlot { Kind = "field", Offset = f.Offset, Size = f.Size, Name = f.Name, Type = f.TypeName, Declaring = f.Declaring, IsRef = f.IsRef, Overlap = overlap, Align = f.Align, Nested = f.Nested, TypeRef = f.TypeRef, Note = f.Note });
             end = Math.Max(end, f.Offset + f.Size);
             prev = f;
         }

@@ -48,7 +48,18 @@ public sealed class Playground
     public string Verify() => JsonSerializer.Serialize(Assembly is { } a ? IlVerifier.Verify(a, Refs)
         : new VerifyResult(true, false, Array.Empty<string>(), "Fix the compile errors first.", 0), Json);
 
-    public string Layout() => LayoutView.Json(Assembly, _code);
+    public string Layout(string? type = null) => LayoutView.Json(Assembly, _code, type == "*" ? null : type, RefNames());
+
+    private IEnumerable<string> RefNames() => Refs.References.Select(r => Path.GetFileNameWithoutExtension(r.Display ?? "")).Where(n => n.Length > 0).ToList();
+
+    /// <summary>Completions for the Layout picker's text box: JSON { from, items: [{ label, insert, detail, kind }] }.</summary>
+    public string CompleteType(string text)
+    {
+        System.Reflection.Assembly? asm = null;
+        if (Assembly is { } a) { try { asm = LayoutView.Load(a); } catch { } }
+        return JsonSerializer.Serialize(TypeResolver.Complete(text, asm, _code), Json);
+    }
+
 
     public string AssemblyBase64() => Assembly is { } a ? Convert.ToBase64String(a) : "";
 
