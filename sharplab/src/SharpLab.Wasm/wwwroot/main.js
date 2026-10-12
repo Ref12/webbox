@@ -236,9 +236,19 @@ async function main() {
       for (const e of v.errors) { const d = document.createElement('div'); d.className = 'bad'; d.textContent = '  ' + e; box.appendChild(d); }
     } else if (tab === 'run') { $('runbtn').disabled = !last?.success; $('runinfo').textContent = last?.success ? (last.isExe ? 'Compiled ' + last.size + ' bytes. Press Run.' : 'A library: nothing to run.') : 'Fix the errors first.'; }
     else if (tab === 'layout') {
-      const data = JSON.parse(await exec.request('layout'));
       state.layoutRuntime ||= 'measured';
-      renderLayout($('layoutout'), data, state, (s) => { if (s.span) { ed.setSel(s.span[0], s.span[1]); ed.focus(); } });
+      const data = JSON.parse(await exec.request('layout', { type: state.layoutType || '*' }));
+      const api = {
+        // pick a type (a name as typed, or '' for every type in the code); fromDrill keeps the way back
+        pick: async (type, back = true) => {
+          if (back && type !== state.layoutType) (state.layoutBack ||= []).push(state.layoutType || '');
+          state.layoutType = type; rendered.layout = null; syncUrlSoon(); await renderActive(); return rendering;
+        },
+        back: () => { const b = state.layoutBack || []; if (b.length) return api.pick(b.pop(), false); },
+        complete: async (text) => JSON.parse(await exec.request('completeType', { text })),
+      };
+      window.__layoutApi = api;
+      renderLayout($('layoutout'), data, state, (s) => { if (s.span) { ed.setSel(s.span[0], s.span[1]); ed.focus(); } }, api);
     }
     else if (tab === 'jit') renderJit(
 $('jit'), { getAssemblyBase64: () => exec.request('assemblyBase64'), compiled: () => last, settings: () => ({ ...state }) });

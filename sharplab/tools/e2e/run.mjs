@@ -162,6 +162,111 @@ metrics.verify = await page.evaluate(() => document.getElementById('verifyout').
   await page.click('#layoutout .lmode button:nth-child(1)');
 }
 
+// Layout picker: pick from the list, type any name (completion), drill into a field's type and go back, keep it in the share link and across recompiles, phone width
+{
+  const src = 'using System;\nusing System.Collections.Generic;\nnamespace Shapes { public struct Point { public int X; public long Y; } }\npublic class Holder { public Shapes.Point P; public Guid Id; public List<int> Items; public Box<long> B; }\npublic struct Box<T> { public byte tag; public T value; }\n';
+  await page.evaluate((c) => window.__sharplab.setCode(c), src);
+  await page.waitForFunction(() => window.__sharplab.last?.success);
+  await tab('layout');
+  const L = page.locator('#layoutout');
+  const sel = L.locator('select.lsel'), input = L.locator('input.lin');
+  const cards = () => page.locator('#layoutout .lcard');
+  const shown = async () => (await page.locator('#layoutout .lcard h3 .tn').allInnerTexts());
+  const settle = () => page.evaluate(() => window.__sharplab.rendering);
+  const opts = await sel.locator('option').allInnerTexts();
+  assert.ok(opts.some((o) => /^Point\b/.test(o)) && opts.some((o) => /^Holder\b/.test(o)) && opts.some((o) => /^Box<Int64>/.test(o)), 'the picker lists the declared types: ' + opts.join('|'));
+  // 1. pick a declared type
+  await sel.selectOption({ label: opts.find((o) => /^Holder\b/.test(o)) });
+  await settle(); await page.waitForFunction(() => document.querySelectorAll('#layoutout .lcard').length === 1);
+  assert.deepEqual(await shown(), ['Holder']);
+  // 2. typed entry with completion: a framework type
+  await input.fill('Guid'); await page.waitForSelector('#layoutout .lsug li');
+  assert.ok((await L.locator('.lsug li').allInnerTexts()).some((t) => /Guid/.test(t) && /System/.test(t)), 'completion offers System.Guid');
+  await L.locator('.lsug li', { hasText: 'System' }).first().dispatchEvent('mousedown');
+  assert.equal(await input.inputValue(), 'System.Guid');
+  await L.locator('button.lgo').click(); await settle();
+  await page.waitForFunction(() => /^Guid\b/.test(document.querySelector('#layoutout .lcard h3 .tn')?.textContent || ''));
+  assert.match(await cards().first().innerText(), /16 bytes/);
+  // a generic framework type, typed in full, plus Enter to submit
+  await input.fill('Dictionary<string,int>'); await input.press('Enter'); await settle();
+  await page.waitForFunction(() => /Dictionary<String, Int32>/.test(document.querySelector('#layoutout .lcard h3 .tn')?.textContent || ''));
+  await input.fill('System.Span<byte>'); await input.press('Enter'); await settle();
+  await page.waitForFunction(() => /Span<Byte>/.test(document.querySelector('#layoutout .lcard h3 .tn')?.textContent || ''));
+  assert.match(await cards().first().innerText(), /ref struct/);
+  // an unknown name says so and shows no card
+  await input.fill('NoSuchType'); await input.press('Enter'); await settle();
+  await page.waitForSelector('#layoutout .lerr');
+  assert.match(await L.locator('.lerr').innerText(), /No type named 'NoSuchType'/);
+  assert.equal(await cards().count(), 0);
+  // 3. drill down: Holder -> its Point field -> back -> back
+  await input.fill('Holder'); await input.press('Enter'); await settle();
+  await page.waitForFunction(() => /^Holder\b/.test(document.querySelector('#layoutout .lcard h3 .tn')?.textContent || ''));
+  await L.locator('td.drill', { hasText: /^Point$/ }).first().click(); await settle();
+  await page.waitForFunction(() => /^Point\b/.test(document.querySelector('#layoutout .lcard h3 .tn')?.textContent || ''));
+  assert.equal(await input.inputValue(), 'Shapes.Point');
+  await L.locator('td.drill', { hasText: /^Int64$/ }).first().click(); await settle();
+  await page.waitForFunction(() => /^Int64\b/.test(document.querySelector('#layoutout .lcard h3 .tn')?.textContent || ''));
+  await L.locator('button.lback').click(); await settle();
+  await page.waitForFunction(() => /^Point\b/.test(document.querySelector('#layoutout .lcard h3 .tn')?.textContent || ''));
+  await L.locator('button.lback').click(); await settle();
+  await page.waitForFunction(() => /^Holder\b/.test(document.querySelector('#layoutout .lcard h3 .tn')?.textContent || ''));
+  // a field type that is a closed generic of the user's type
+  await L.locator('td.drill', { hasText: /^Box<Int64>$/ }).first().click(); await settle();
+  await page.waitForFunction(() => /^Box<Int64>/.test(document.querySelector('#layoutout .lcard h3 .tn')?.textContent || ''));
+  // a user type: clicking its name still selects it in the editor
+  await L.locator('.lcard h3 .tn').first().click();
+  assert.equal(await page.evaluate(() => { const s = window.__sharplab.ed.getSel(); return window.__sharplab.state.code.slice(s.start, s.end); }), 'Box', 'the type name selects the declaration');
+  // 4. the share link keeps the picked type and the runtime
+  await input.fill('System.Guid'); await input.press('Enter'); await settle();
+  await page.click('#layoutout .lmode button:nth-child(2)'); await settle();
+  await page.evaluate(() => { window.__lastShare = undefined; }); await page.click('#share'); await page.waitForFunction(() => window.__lastShare);
+  const surl = await page.evaluate(() => window.__lastShare);
+  const lp = await load(ctx, 8125, surl.slice(surl.indexOf('#')));
+  await lp.page.waitForFunction(() => window.__sharplab?.state.tab === 'layout' && document.querySelector('#layoutout .lcard'), null, { timeout: 60000 });
+  assert.equal(await lp.page.evaluate(() => window.__sharplab.state.layoutType), 'System.Guid');
+  assert.equal(await lp.page.locator('#layoutout input.lin').inputValue(), 'System.Guid');
+  assert.match(await lp.page.locator('#layoutout .lcard h3 .tn').first().innerText(), /^Guid/);
+  assert.match(await lp.page.locator('#layoutout .lmode button.on').innerText(), /CoreCLR/);
+  await lp.page.close();
+  // 5. across recompiles: kept while the type exists, an error once it is gone, back again when it returns
+  await page.evaluate(() => window.__layoutApi.pick('Shapes.Point'));
+  await page.evaluate((c) => window.__sharplab.setCode(c.replace('public int X;', 'public int X; public int Z;')), src); await settle();
+  await page.waitForFunction(() => /^Point\b/.test(document.querySelector('#layoutout .lcard h3 .tn')?.textContent || '') && document.querySelector('#layoutout .lcard')?.innerText.includes('Z'));
+  await page.evaluate(() => window.__sharplab.setCode('public class Other { public int a; }')); await settle();
+  await page.waitForSelector('#layoutout .lerr');
+  assert.match(await L.locator('.lerr').innerText(), /Shapes\.Point/);
+  await page.evaluate((c) => window.__sharplab.setCode(c), src); await settle();
+  await page.waitForFunction(() => /^Point\b/.test(document.querySelector('#layoutout .lcard h3 .tn')?.textContent || ''));
+  // 6. screenshots (desktop, typed-entry completion, drill-down) in docs/layout
+  fs.mkdirSync(path.join(docs, 'layout'), { recursive: true });
+  await page.evaluate(() => window.__layoutApi.pick('Holder')); await settle();
+  await page.click('#layoutout .lmode button:nth-child(1)'); await settle();
+  await page.screenshot({ path: path.join(docs, 'layout', 'picker-holder.png') });
+  await input.fill('Dict'); await page.waitForSelector('#layoutout .lsug li');
+  await page.screenshot({ path: path.join(docs, 'layout', 'picker-completion.png') });
+  await input.press('Escape'); await input.fill('System.Collections.Generic.Dictionary<string,int>'); await input.press('Enter'); await settle();
+  await page.waitForFunction(() => /Dictionary/.test(document.querySelector('#layoutout .lcard h3 .tn')?.textContent || ''));
+  await page.screenshot({ path: path.join(docs, 'layout', 'picker-dictionary.png') });
+  // 7. phone width: no horizontal overflow, the picker controls fit and work
+  await page.setViewportSize({ width: 390, height: 780 });
+  await page.evaluate(() => window.__layoutApi.pick('Holder')); await settle();
+  const fits = await page.evaluate(() => { const h = document.querySelector('#layoutout'); return { sw: h.scrollWidth, cw: h.clientWidth, boxes: [...h.querySelectorAll('.lpick > *')].map((e) => { const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.right), Math.round(r.height)]; }) }; });
+  assert.ok(fits.sw <= fits.cw + 1, 'no horizontal scroll at phone width: ' + JSON.stringify(fits));
+  assert.ok(fits.boxes.every(([l, r, h]) => l >= 0 && r <= 390 && h >= 30), 'picker controls inside the phone screen and tappable: ' + JSON.stringify(fits.boxes));
+  await input.fill('Guid'); await page.waitForSelector('#layoutout .lsug li');
+  const sug = await page.evaluate(() => { const r = document.querySelector('#layoutout .lsug').getBoundingClientRect(); return [r.left, r.right]; });
+  assert.ok(sug[0] >= 0 && sug[1] <= 390, 'suggestions fit the phone: ' + sug);
+  await page.screenshot({ path: path.join(docs, 'layout', 'picker-phone-completion.png') });
+  await L.locator('.lsug li', { hasText: 'System' }).first().dispatchEvent('mousedown');
+  await L.locator('button.lgo').click(); await settle();
+  await page.waitForFunction(() => /^Guid\b/.test(document.querySelector('#layoutout .lcard h3 .tn')?.textContent || ''));
+  await L.locator('td.drill').first().click().catch(() => {});
+  await settle();
+  await page.screenshot({ path: path.join(docs, 'layout', 'picker-phone.png') });
+  await page.setViewportSize({ width: 1199, height: 768 });
+  await page.evaluate(() => window.__layoutApi.pick(''));
+}
+
 // diagnostics: a language-version error shows up as a Monaco marker and in the problem list
 await page.evaluate(() => window.__sharplab.setCode('record R(int A);\nclass P { static void Main() { int x = "s"; } }\n'));
 await page.waitForFunction(() => document.getElementById('problems').innerText.includes('CS0029'));

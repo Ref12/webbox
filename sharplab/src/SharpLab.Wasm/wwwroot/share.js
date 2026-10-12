@@ -53,6 +53,7 @@ export async function decodeShare(fragment) {
       level,
       tab: typeof o.t === 'string' ? o.t : DEFAULTS.tab,
       layoutRuntime: o.m === 'c' ? 'modelled' : 'measured',
+      layoutType: typeof o.y === 'string' ? o.y.slice(0, 300) : '',
     };
   } catch { return null; }
 }

@@ -56,7 +56,8 @@ const handlers = {
   async il() { await booted; return I().Il(); },
   async decompile({ level }) { await booted; return I().Decompile(level); },
   async verify() { await booted; return I().Verify(); },
-  async layout() { await booted; return I().Layout(); },
+  async layout({ type } = {}) { await booted; return I().Layout(type ?? '*'); },
+  async completeType({ text }) { await booted; return I().CompleteType(text ?? ''); },
   async run() { await booted; return await I().Run(); },
   async assemblyBase64() { await booted; return I().AssemblyBase64(); },
 
