@@ -1,0 +1,14 @@
+import { chromium } from 'playwright-core';
+import { spawn } from 'node:child_process';
+import path from 'node:path';
+const s = spawn(process.execPath, [path.resolve('..', 'pages-sim.mjs'), path.resolve('../../_site'), '8131', '/webbox', '--gzip=text'], { stdio: 'ignore' });
+await new Promise((r) => setTimeout(r, 800));
+const b = await chromium.launch({ executablePath: '/usr/bin/chromium', args: ['--no-sandbox'] });
+const p = await (await b.newContext({ viewport: { width: 390, height: 780 } })).newPage();
+await p.goto('http://localhost:8131/webbox/sharplab/');
+await p.waitForFunction(() => window.__sharplab?.last, null, { timeout: 120000 });
+await p.evaluate(() => window.__sharplab.showTab('layout'));
+await p.waitForTimeout(1500);
+console.log(JSON.stringify(await p.evaluate(() => ['header', 'main', '#left', '#editor', '#right', '#panes', '#layoutout', '.lpick'].map((q) => { const e = document.querySelector(q); const r = e?.getBoundingClientRect(); return [q, r && Math.round(r.top), r && Math.round(r.height), getComputedStyle(e).display]; }).concat([['win', window.scrollY, document.documentElement.scrollHeight, innerHeight]]))));
+await p.screenshot({ path: '/home/runner/work/_temp/hexad-scratch/probe.png' });
+s.kill(); await b.close();

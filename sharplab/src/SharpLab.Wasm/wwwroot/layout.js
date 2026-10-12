@@ -52,6 +52,7 @@ function table(l, select, api) {
 /** host: container element; data: parsed JSON from the runtime's Layout(); select(span): selects the span in the editor. */
 export function renderLayout(host, data, state, select, api) {
   host.textContent = '';
+  if (api) host.appendChild(picker(data, state, api));   // first: on a phone the intro text would push it out of view
   const intro = el('div', 'lintro');
   intro.append('Memory layout of every type in your code. ', el('b', '', 'Measured'), ' = read from the runtime running this page (' + data.runtimeName + ', ' + data.pointerSize * 8 + '-bit); ', el('b', '', 'CoreCLR x64'), ' = what the desktop .NET runtime does, computed from the type metadata (a model: Mono lays out some types differently, and the model can differ from the real runtime, mostly for large nested structs, Int128/Vector fields and Pack on derived classes). Format and idea: ');
   const a = el('a', '', 'ObjectLayoutInspector'); a.href = 'https://github.com/SergeyTeplyakov/ObjectLayoutInspector'; a.target = '_blank'; a.rel = 'noopener'; intro.append(a, ' (MIT, © Sergey Teplyakov).');
@@ -62,7 +63,6 @@ export function renderLayout(host, data, state, select, api) {
     b.onclick = () => { state.layoutRuntime = k; renderLayout(host, data, state, select, api); }; mode.appendChild(b);
   }
   host.appendChild(mode);
-  if (api) host.appendChild(picker(data, state, api));
   if (data.error) host.appendChild(el('div', 'bad lnote lerr', data.error));
   if (data.resolveNote) host.appendChild(el('div', 'dim lnote', data.resolveNote));
   if (!data.available
