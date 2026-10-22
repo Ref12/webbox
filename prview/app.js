@@ -3,6 +3,7 @@ import { GitHub, GhError, skipReason } from './lib/github.js';
 import { diffFile, layoutRows, wordDiff } from './lib/diff.js';
 import { buildTree, flattenTree, orderedFiles, STATUS } from './lib/tree.js';
 import { parsePrRef, parseRoute, toRoute, githubUrl } from './lib/url.js';
+import { rulerMarks, placeMarks, jumpTop } from './lib/ruler.js';
 import { esc, lineHtml, mdLite, ago, shortSha, externalLink } from './lib/render.js';
 import { getSession, setSession, clearSession } from './lib/auth.js';
 import { signInDialog, settingsDialog as settingsUi } from './lib/signin.js';
@@ -25,7 +26,7 @@ let hl = null;                // lazily imported highlighter
 let charW = 7.6;
 const defaultView = () => store.get('view', 'one') === 'all' ? 'all' : 'one';
 const modeKey = () => PHONE() ? 'mode-phone' : 'mode';   // a phone defaults to inline whatever the desktop chose
-const ui = { mode: store.get(modeKey(), 'inline'), full: false };
+const ui = { mode: store.get(modeKey(), 'inline'), full: true };   // full-file diffs by default; the toolbar button / f / x=0 switch to changes only
 
 // ---------------------------------------------------------------- banner, rate, dialogs
 function banner(html) { const b = $('#banner'); b.innerHTML = html || ''; b.hidden = !html; }
@@ -94,7 +95,7 @@ function helpDialog() {
 window.addEventListener('hashchange', () => { if (S && S.hashSet === location.hash) return; route(); });
 function syncHash() {
   if (!S) return;
-  const p = { f: S.drawerStart ? '' : S.view === 'one' ? S.selected : S.selected && S.selected !== S.order[0]?.filename ? S.selected : '', c: S.cparam || '', m: ui.mode === 'split' ? 'split' : '', v: S.view !== defaultView() ? S.view : '', x: ui.full ? '1' : '' };
+  const p = { f: S.drawerStart ? '' : S.view === 'one' ? S.selected : S.selected && S.selected !== S.order[0]?.filename ? S.selected : '', c: S.cparam || '', m: ui.mode === 'split' ? 'split' : '', v: S.view !== defaultView() ? S.view : '', x: ui.full ? '' : '0' };
   const h = toRoute(S.ref, p, S.tab);
   if (h !== location.hash) { S.hashSet = h; history.replaceState(null, '', h); }
 }
@@ -150,7 +151,7 @@ async function openPr(ref, tab, params) {
     items: [], tops: new Float64Array(0), cmH: new Map(), gen: 0, loadQueue: [], active: 0, winFiles: new Set(), selected: params.f || null, current: null, treeRows: [], comments: null, threads: [], gql: null, pending: [], composer: null, drafts: new Map(), tOpen: new Map(), terr: new Map(), outOpen: new Set(), panel: false, pfilter: 'all', vw: 0, threadItem: new Map(),
   };
   if (params.m) ui.mode = params.m === 'split' ? 'split' : 'inline';
-  ui.full = params.x === '1';
+  ui.full = params.x !== '0';
   try {
     const [pr, files, commits] = await Promise.all([gh.pr(ref), gh.prFiles(ref), gh.prCommits(ref)]);
     if (S !== s) return;
@@ -433,6 +434,7 @@ function onDiffOver(e) {
   }
 }
 function paintSel() {
+  drawRuler();
   document.querySelectorAll('#win [data-cl]').forEach(el => { const it = el.closest('.it'); const f = S.items[Number(it.dataset.i)].f; el.classList.toggle('sel', inSel(f, el.dataset.cl[0], Number(el.dataset.cl.slice(2)))); });
 }
 function onDiffDown(e) {
@@ -568,11 +570,12 @@ function renderPage() {
       <span class="seg" id="file-nav"><button id="prev-file" title="Previous file (k)" aria-label="Previous file">‹</button><span id="file-pos" class="fpos"></span><button id="next-file" title="Next file (j)" aria-label="Next file">›</button></span>
       <button id="coll-btn" class="hide-phone" title="Collapse or expand every file"></button>
       <span class="seg hide-phone"><button id="prev-chg" title="Previous change (p)">↑</button><button id="next-chg" title="Next change (n)">↓</button></span>
+      <input id="find" type="search" placeholder="Find" aria-label="Find in the diff (Enter: next hit)" autocomplete="off" value="${esc(s.find || '')}">
       <button id="cm-btn" title="All comment threads">💬 <span id="cm-n"></span></button>
       <button id="rv-btn" title="Post your pending comments as a review, or approve / request changes" hidden>Finish review</button>
       <button id="help-btn" class="icon hide-phone" title="Keyboard (?)">?</button></div>
     <div id="body">${drawerHtml(true)}<div id="scrim"></div>
-      <section id="diff" aria-label="Changes"><div id="stick"></div><div id="spacer"><div id="win"></div></div></section><aside id="cpanel" aria-label="Comments" hidden></aside></div>`;
+      <section id="diff" aria-label="Changes"><div id="stick"></div><div id="spacer"><div id="win"></div></div></section><div id="ruler" aria-label="Overview ruler: changes, comments, selection and search hits" role="presentation"></div><aside id="cpanel" aria-label="Comments" hidden></aside></div>`;
   wireFiles(); wireDrawer();
   S.vw = $('#diff').clientWidth;
   updateToolbar();
@@ -655,6 +658,10 @@ function wireFiles() {
   renderPanel();
   $('#scrim').onclick = () => document.body.classList.remove('drawer');
   $('#diff').addEventListener('scroll', renderDiffSoon, { passive: true });
+  $('#diff').addEventListener('scroll', rulerThumb, { passive: true });
+  $('#ruler').addEventListener('click', onRulerClick);
+  $('#find').addEventListener('input', e => { S.find = e.target.value.trim().toLowerCase(); S.hitAt = -1; S.winKey = null; renderDiff(); drawRuler(); });
+  $('#find').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); nextHit(e.shiftKey ? -1 : 1); } });
   $('#tree').addEventListener('scroll', renderTreeSoon, { passive: true });
   $('#tree').addEventListener('click', onTreeClick);
   $('#diff').addEventListener('click', onDiffClick);
@@ -667,7 +674,7 @@ function wireFiles() {
   $('#cm-btn').onclick = () => { S.panel = !S.panel; if (PHONE()) document.body.classList.toggle('phone-panel', S.panel); renderPanel(); };
   $('#rv-btn').onclick = reviewDialog;
   $('#stick').addEventListener('click', onDiffClick);
-  new ResizeObserver(() => { const d = $('#diff'); if (d) { d.style.setProperty('--vw', d.clientWidth + 'px'); const w = d.clientWidth; if (S && Math.abs(w - S.vw) > 1) { S.vw = w; if (ui.mode === 'split' && S.fl) relayout(true); } renderDiffSoon(true); renderTreeSoon(); } }).observe($('#diff'));
+  new ResizeObserver(() => { const d = $('#diff'); if (d) { d.style.setProperty('--vw', d.clientWidth + 'px'); const w = d.clientWidth; if (S && Math.abs(w - S.vw) > 1) { S.vw = w; if (ui.mode === 'split' && S.fl) relayout(true); } renderDiffSoon(true); renderTreeSoon(); drawRuler(); } }).observe($('#diff'));
 }
 
 function updateToolbar() {
@@ -862,6 +869,38 @@ function buildItems() {
   S.itemIndex = new Map(items.map((it, i) => [it.key, i]));
 }
 
+// ---- overview ruler: marks for changes, comments, the selection and search hits along the scrollbar
+const rowTexts = it => { const d = it.f.st.diff, r = it.row, out = []; if (r.a != null && r.k !== 'add') out.push(d.a[r.a]); if (r.b != null && r.k !== 'del' && !(r.k === 'eq')) out.push(d.b[r.b]); if (r.k === 'eq') out.push(d.b[r.b]); return out; };
+function rowHit(it) { return !!(S.find && it.type === 'row' && rowTexts(it).some(t => t.toLowerCase().includes(S.find))); }
+function rowSel(it) {
+  if (it.type !== 'row' || !(S.drag && S.drag.cur != null || S.composer)) return false;
+  return rowTarget(it.row).some(t => inSel(it.f, t.side, t.line));
+}
+function drawRuler() {
+  const r = $('#ruler'); if (!r || !S || !S.items) return;
+  const total = S.tops[S.items.length], H = r.clientHeight;
+  const marks = placeMarks(rulerMarks(S.items, S.tops, { sel: rowSel, hit: S.find ? rowHit : null }), total, H);
+  const names = { add: 'Added', del: 'Removed', mod: 'Modified', cm: 'Comment', sel: 'Selection', hit: 'Search hit' };
+  r.innerHTML = marks.map(m => '<i class="rk ' + m.kind + '" style="top:' + m.top.toFixed(1) + 'px;height:' + m.h.toFixed(1) + 'px" data-y="' + m.y + '" title="' + names[m.kind] + '"></i>').join('') + '<b class="rv"></b>';
+  rulerThumb();
+}
+function rulerThumb() {
+  const r = $('#ruler'), d = $('#diff'), v = r && r.querySelector('.rv'); if (!v || !S || !S.items) return;
+  const total = S.tops[S.items.length] || 1, H = r.clientHeight;
+  v.style.top = (d.scrollTop / total * H).toFixed(1) + 'px'; v.style.height = Math.min(H, d.clientHeight / total * H).toFixed(1) + 'px';
+}
+function onRulerClick(e) {
+  const d = $('#diff'), r = $('#ruler'), total = S.tops[S.items.length], m = e.target.closest('.rk');
+  const y = m ? Number(m.dataset.y) : (e.clientY - r.getBoundingClientRect().top) / r.clientHeight * total;
+  S.pin = null; d.scrollTop = jumpTop(y, d.clientHeight, total);
+}
+function nextHit(dir) {
+  const ys = []; S.items.forEach((it, i) => { if (rowHit(it)) ys.push(S.tops[i]); });
+  if (!ys.length) return;
+  S.hitAt = ((S.hitAt ?? -1) + dir + ys.length) % ys.length;
+  const d = $('#diff'); S.pin = null; d.scrollTop = jumpTop(ys[S.hitAt], d.clientHeight, S.tops[S.items.length]);
+}
+
 function firstVisible(y) {
   const t = S.tops; let lo = 0, hi = S.items.length - 1;
   while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (t[mid] <= y) lo = mid; else hi = mid - 1; }
@@ -885,6 +924,7 @@ function relayout(keepAnchor) {
   S.winKey = null;
   el.dataset.state = S.items.length ? 'ready' : 'empty';
   renderDiff();
+  drawRuler();
   if (S.jump) tryJump();
 }
 
@@ -903,7 +943,7 @@ function headHtml(f, stuck) {
     ${ce ? `<span class="muted" title="Review comments">💬 ${ce.count}</span>` : ''}
     <span class="sp"></span>
     <label><input type="checkbox" data-act="review" ${rv ? 'checked' : ''}> Reviewed</label>
-    <button data-act="full" title="Show the whole file with the changes marked">${st.full ? 'Changes only' : 'View'}</button>
+    ${ui.full ? '' : `<button data-act="full" title="Show the whole file with the changes marked">${st.full ? 'Changes only' : 'View'}</button>`}
     ${externalLink(blob, '↗')}</div>`;
 }
 
@@ -957,13 +997,13 @@ function itemHtml(it, i) {
           const add = target ? addBtn(f, sd, ln) : '';
           return `<div class="half ${cls}${target && inSel(f, sd, ln) ? ' sel' : ''}"${attrs}>${add}<span class="ln">${ln}</span><span class="sg">${cls === 'add' ? '+' : cls === 'del' ? '−' : ''}</span><span class="tx">${textHtml(f, side, idx, wr && wr[side], 'wd')}</span></div>`;
         };
-        return wrap('r', `<div class="row split${last}">${half('a', r.a, changed && !same ? 'del' : '')}${half('b', r.b, changed && !same ? 'add' : '')}</div>`);
+        return wrap('r' + (rowHit(it) ? ' hit' : ''), `<div class="row split${last}">${half('a', r.a, changed && !same ? 'del' : '')}${half('b', r.b, changed && !same ? 'add' : '')}</div>`);
       }
       const wr = r.w ? wordRanges(f, r.w) : null;
       const side = r.k === 'del' ? 'a' : 'b', idx = r.k === 'del' ? r.a : r.b;
       const sd = r.k === 'del' ? 'L' : 'R', ln = (r.k === 'del' ? r.a : r.b) + 1;
       const add = addBtn(f, sd, ln);
-      return wrap('r', `<div class="row ${r.k === 'eq' ? '' : r.k}${last}${inSel(f, sd, ln) ? ' sel' : ''}" data-cl="${sd}:${ln}">${add}<span class="ln">${r.a != null ? r.a + 1 : ''}</span><span class="ln">${r.b != null ? r.b + 1 : ''}</span><span class="sg">${r.k === 'add' ? '+' : r.k === 'del' ? '−' : ''}</span><span class="tx">${textHtml(f, side, idx, wr && wr[side], 'wd')}</span></div>`);
+      return wrap('r' + (rowHit(it) ? ' hit' : ''), `<div class="row ${r.k === 'eq' ? '' : r.k}${last}${inSel(f, sd, ln) ? ' sel' : ''}" data-cl="${sd}:${ln}">${add}<span class="ln">${r.a != null ? r.a + 1 : ''}</span><span class="ln">${r.b != null ? r.b + 1 : ''}</span><span class="sg">${r.k === 'add' ? '+' : r.k === 'del' ? '−' : ''}</span><span class="tx">${textHtml(f, side, idx, wr && wr[side], 'wd')}</span></div>`);
     }
   }
 }

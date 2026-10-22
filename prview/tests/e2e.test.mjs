@@ -9,6 +9,7 @@ fs.mkdirSync(SHOTS, { recursive: true });
 const shot = (p, name) => p.screenshot({ path: SHOTS + name + '.png' });
 
 async function open(h, hash = PR) {
+  if (!/[?&]x=/.test(hash)) hash += (hash.includes('?') ? '&' : '?') + 'x=0';   // these tests exercise changes-only; the app default is full files
   await h.page.goto(h.base + hash);
   await h.page.waitForSelector('.fh', { timeout: 15000 });
   await h.page.waitForSelector('.row', { timeout: 15000 });

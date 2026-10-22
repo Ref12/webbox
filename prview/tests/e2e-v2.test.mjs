@@ -12,6 +12,7 @@ const LINK = 'src/tools/illink/src/ILLink.Tasks/LinkTask.cs';
 const LIVE_ROOT = 4167554232, TARGETS_ROOT = 4168145947, OUTDATED_ROOT = 4186668554;
 
 async function open(h, hash = PR, sel = '.row') {
+  if (!/[?&]x=/.test(hash)) hash += (hash.includes('?') ? '&' : '?') + 'x=0';   // these tests exercise changes-only; the app default is full files
   await h.page.goto(h.base + hash);
   await h.page.waitForSelector('.fh', { timeout: 15000 });
   await h.page.waitForSelector(sel, { timeout: 15000 });

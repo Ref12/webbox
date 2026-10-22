@@ -207,3 +207,18 @@ dialog { max-height: 90vh; overflow: auto; }
   #drawer .seg { display: inline-flex; } #drawer .seg button { border: 1px solid var(--line); border-radius: 0; background: var(--panel); } #drawer .seg button.on { background: var(--sel); border-color: var(--accent); }
   .pop { z-index: 40; }
 }
+
+/* overview ruler beside the scrollbar: left lane = changes, right lane = comments / selection / search hits */
+:root { --rk-add:#2da44e; --rk-del:#d1242f; --rk-mod:#d4a72c; --rk-cm:#8250df; --rk-sel:#0969da; --rk-hit:#e5539c; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --rk-add:#3fb950; --rk-del:#ff6b6b; --rk-mod:#e3b341; --rk-cm:#b392f0; --rk-sel:#58a6ff; --rk-hit:#f778ba; } }
+#ruler { position: relative; flex: none; width: 16px; background: var(--panel); border-left: 1px solid var(--line); overflow: hidden; user-select: none; cursor: pointer; }
+#ruler[hidden] { display: none; }
+#ruler .rv { position: absolute; left: 0; right: 0; background: var(--text); opacity: .09; pointer-events: none; min-height: 6px; }
+#ruler .rk { position: absolute; display: block; border-radius: 1px; }
+#ruler .rk::before { content: ""; position: absolute; left: 0; right: 0; top: -5px; bottom: -5px; }
+#ruler .rk.add { left: 1px; width: 8px; background: var(--rk-add); } #ruler .rk.del { left: 1px; width: 8px; background: var(--rk-del); } #ruler .rk.mod { left: 1px; width: 8px; background: var(--rk-mod); }
+#ruler .rk.cm { left: 9px; right: 1px; background: var(--rk-cm); min-height: 5px; } #ruler .rk.sel { left: 9px; right: 1px; background: var(--rk-sel); }
+#ruler .rk.hit { left: 9px; right: 1px; background: var(--rk-hit); }
+.it.hit .row { box-shadow: inset 3px 0 var(--rk-hit); }
+#find { width: 110px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); }
+@media (max-width: 800px) { #ruler { width: 18px; } #find { width: 80px; } }

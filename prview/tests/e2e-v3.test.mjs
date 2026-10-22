@@ -10,6 +10,7 @@ const shot = (p, name) => p.screenshot({ path: SHOTS + name + '.png' });
 const LINK = 'src/tools/illink/src/ILLink.Tasks/LinkTask.cs';
 
 async function open(h, hash = PR) {
+  if (!/[?&]x=/.test(hash)) hash += (hash.includes('?') ? '&' : '?') + 'x=0';   // these tests exercise changes-only; the app default is full files
   await h.page.goto(h.base + hash);
   await h.page.waitForSelector('.fh', { timeout: 15000 });
   await h.page.waitForSelector('.row', { timeout: 15000 });
@@ -65,7 +66,8 @@ test('Settings: All files stacked is an option, remembered in localStorage and i
   await p.waitForFunction(() => document.querySelectorAll('#win .fh').length > 1);
   assert.equal(await p.evaluate(() => localStorage.getItem('prview.view')), '"all"');
   // remembered: reload without v= stays stacked
-  await p.goto(h.base + PR); await p.reload(); await p.waitForSelector('.fh');
+  await p.goto(h.base + PR + '?x=0'); await p.reload();   // full files make the first file taller than the window, so only its header is in the DOM
+  await p.waitForSelector('.fh');
   await p.waitForFunction(() => document.querySelectorAll('#win .fh').length > 1);
   assert.doesNotMatch(await p.evaluate(() => location.hash), /v=/);
   // and back
