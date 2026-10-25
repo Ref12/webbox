@@ -198,4 +198,3 @@ setTimeout(() => {
   for (const n of Object.keys(banks)) { validateBank(banks[n]); count += banks[n].puzzles.length }
   console.log('regions: validator accepted the bank, ' + count + ' boards')
 }, 0)
-if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {})
