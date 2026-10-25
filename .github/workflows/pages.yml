@@ -67,6 +67,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      # The pinned third-party forks (ILSpy, binlog, quoter) are built as they are; NuGet's vulnerability audit on their
+      # dependencies is a warning their builds turn into an error, so a new advisory breaks every deploy. Audit off for these builds.
+      NuGetAudit: false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
