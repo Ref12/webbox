@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Regions</title>
+<meta name="description" content="Regions: place one marker in every row, column and colour region, with no two touching.">
+<link rel="icon" href="../icons/icon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#14161b" media="(prefers-color-scheme: dark)">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<main id="app">
+  <header class="top">
+    <a class="home" href="../" aria-label="webbox home">&lsaquo;</a>
+    <h1>Regions</h1>
+    <span id="timer" class="timer" aria-live="off">0:00</span>
+    <button id="help" class="ico" aria-label="Rules" title="Rules">?</button>
+  </header>
+  <section class="pick" aria-label="Pick a board">
+    <label>Size <select id="size"></select></label>
+    <label>Level <select id="diff"><option value="easy">easy</option><option value="medium">medium</option><option value="hard">hard</option></select></label>
+    <button id="random">Random</button>
+    <button id="next">Next</button>
+    <span id="boardId" class="bid"></span>
+  </section>
+  <div id="gridWrap"><div id="grid" class="grid" tabindex="0" role="grid" aria-label="Board"></div></div>
+  <p id="msg" class="msg" role="status"></p>
+  <section class="bar" aria-label="Actions">
+    <button id="undo">Undo</button>
+    <button id="reset">Reset</button>
+    <button id="hint">Hint</button>
+  </section>
+  <section class="opts" aria-label="Options">
+    <label><input type="checkbox" id="auto"> Auto-&#x2715;</label>
+    <label><input type="checkbox" id="paint"> Drag &#x2715;</label>
+    <label><input type="checkbox" id="challenge"> Colour challenge</label>
+    <label>Glyphs <select id="glyphs"><option value="shapes">shapes</option><option value="chars">characters</option></select></label>
+  </section>
+  <dialog id="win"><h2>Solved!</h2><p id="winText"></p><div class="bar"><button id="winNext">Next board</button><button id="winClose">Close</button></div></dialog>
+  <dialog id="rules"><h2>Rules</h2>
+    <p>Place exactly one marker in every row, column and colour region. Markers may not touch, not even diagonally. Markers far apart on a diagonal are fine.</p>
+    <p>Tap a cell: empty &rarr; &#x2715; &rarr; marker &rarr; empty. Long-press and drag to paint &#x2715;s (or switch on Drag &#x2715;). Keys: arrows move, space/x cycle, u undo, h hint.</p>
+    <p>Colour challenge swaps the palette for near shades of one hue; each region gets a glyph instead.</p>
+    <div class="bar"><button id="rulesClose">Got it</button></div></dialog>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>
