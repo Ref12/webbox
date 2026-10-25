@@ -1,0 +1,1663 @@
+{
+  "schemaVersion": 1,
+  "rulesVersion": "regions-no-touch-v1",
+  "generatorVersion": "region-growth-v1",
+  "solverVersion": "region-logic-v1",
+  "recipe": {
+    "size": 8,
+    "seed": 1919248136,
+    "quotas": {
+      "easy": 2,
+      "medium": 2,
+      "hard": 2
+    },
+    "maxAttempts": 5000
+  },
+  "puzzles": [
+    {
+      "id": "regions-v1-8-72656708-23",
+      "size": 8,
+      "regions": [
+        0,
+        1,
+        1,
+        1,
+        1,
+        2,
+        2,
+        2,
+        1,
+        1,
+        1,
+        1,
+        1,
+        2,
+        2,
+        2,
+        3,
+        1,
+        1,
+        4,
+        4,
+        2,
+        2,
+        2,
+        3,
+        3,
+        3,
+        3,
+        4,
+        2,
+        4,
+        2,
+        3,
+        5,
+        3,
+        3,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        6,
+        6,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        7
+      ],
+      "attempt": 23,
+      "difficulty": "easy",
+      "solution": [
+        0,
+        2,
+        5,
+        3,
+        1,
+        6,
+        4,
+        7
+      ],
+      "trace": [
+        {
+          "technique": "single",
+          "house": {
+            "kind": "region",
+            "index": 0
+          },
+          "cell": 0,
+          "eliminated": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            16,
+            24,
+            32,
+            40,
+            48,
+            56
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "region",
+            "index": 5
+          },
+          "cell": 33,
+          "eliminated": [
+            17,
+            25,
+            26,
+            34,
+            35,
+            36,
+            37,
+            38,
+            39,
+            41,
+            42,
+            49,
+            57
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "region",
+            "index": 3
+          },
+          "cell": 27,
+          "eliminated": [
+            11,
+            18,
+            19,
+            20,
+            28,
+            29,
+            30,
+            31,
+            43,
+            51,
+            59
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "region",
+            "index": 7
+          },
+          "cell": 63,
+          "eliminated": [
+            15,
+            23,
+            47,
+            54,
+            55,
+            58,
+            60,
+            61,
+            62
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "region",
+            "index": 6
+          },
+          "cell": 46,
+          "eliminated": [
+            14,
+            22,
+            44,
+            45,
+            53
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "row",
+            "index": 2
+          },
+          "cell": 21,
+          "eliminated": [
+            12,
+            13
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "row",
+            "index": 1
+          },
+          "cell": 10,
+          "eliminated": [
+            50
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "row",
+            "index": 6
+          },
+          "cell": 52,
+          "eliminated": []
+        }
+      ]
+    },
+    {
+      "id": "regions-v1-8-72656708-27",
+      "size": 8,
+      "regions": [
+        0,
+        1,
+        1,
+        2,
+        2,
+        2,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        3,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        4,
+        1,
+        4,
+        1,
+        1,
+        1,
+        1,
+        5,
+        4,
+        4,
+        4,
+        4,
+        1,
+        1,
+        1,
+        1,
+        4,
+        4,
+        4,
+        4,
+        1,
+        1,
+        6,
+        1,
+        4,
+        4,
+        4,
+        1,
+        1,
+        1,
+        1,
+        1,
+        4,
+        7,
+        4,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "attempt": 27,
+      "difficulty": "easy",
+      "solution": [
+        3,
+        5,
+        0,
+        7,
+        2,
+        6,
+        4,
+        1
+      ],
+      "trace": [
+        {
+          "technique": "single",
+          "house": {
+            "kind": "region",
+            "index": 3
+          },
+          "cell": 13,
+          "eliminated": [
+            4,
+            5,
+            6,
+            8,
+            9,
+            10,
+            11,
+            12,
+            14,
+            15,
+            20,
+            21,
+            22,
+            29,
+            37,
+            45,
+            53,
+            61
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "region",
+            "index": 2
+          },
+          "cell": 3,
+          "eliminated": [
+            0,
+            1,
+            2,
+            7,
+            19,
+            27,
+            35,
+            43,
+            51,
+            59
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "region",
+            "index": 0
+          },
+          "cell": 16,
+          "eliminated": [
+            17,
+            18,
+            23,
+            24,
+            25,
+            32,
+            40,
+            48,
+            56
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "region",
+            "index": 5
+          },
+          "cell": 31,
+          "eliminated": [
+            26,
+            28,
+            30,
+            38,
+            39,
+            47,
+            55,
+            63
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "region",
+            "index": 6
+          },
+          "cell": 46,
+          "eliminated": [
+            41,
+            42,
+            44,
+            54,
+            62
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "region",
+            "index": 7
+          },
+          "cell": 57,
+          "eliminated": [
+            33,
+            49,
+            50,
+            58,
+            60
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "row",
+            "index": 6
+          },
+          "cell": 52,
+          "eliminated": [
+            36
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "row",
+            "index": 4
+          },
+          "cell": 34,
+          "eliminated": []
+        }
+      ]
+    },
+    {
+      "id": "regions-v1-8-72656708-26",
+      "size": 8,
+      "regions": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        3,
+        2,
+        2,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        0,
+        4,
+        0,
+        2,
+        5,
+        0,
+        0,
+        6,
+        0,
+        0,
+        0,
+        2,
+        5,
+        7,
+        7,
+        6,
+        0,
+        0,
+        0,
+        7,
+        7,
+        7,
+        7,
+        6,
+        0,
+        0,
+        0
+      ],
+      "attempt": 26,
+      "difficulty": "medium",
+      "solution": [
+        5,
+        2,
+        7,
+        0,
+        6,
+        4,
+        1,
+        3
+      ],
+      "trace": [
+        {
+          "technique": "single",
+          "house": {
+            "kind": "region",
+            "index": 3
+          },
+          "cell": 23,
+          "eliminated": [
+            7,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            30,
+            31,
+            39,
+            47,
+            55,
+            63
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "region",
+            "index": 4
+          },
+          "cell": 38,
+          "eliminated": [
+            6,
+            29,
+            32,
+            33,
+            34,
+            35,
+            36,
+            37,
+            45,
+            46,
+            54,
+            62
+          ]
+        },
+        {
+          "technique": "confinement",
+          "source": {
+            "kind": "row",
+            "index": 0
+          },
+          "target": {
+            "kind": "region",
+            "index": 0
+          },
+          "eliminated": [
+            8,
+            11,
+            12,
+            13,
+            26,
+            27,
+            28,
+            42,
+            43,
+            53,
+            61
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "column",
+            "index": 5
+          },
+          "cell": 5,
+          "eliminated": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "technique": "confinement",
+          "source": {
+            "kind": "row",
+            "index": 3
+          },
+          "target": {
+            "kind": "region",
+            "index": 2
+          },
+          "eliminated": [
+            40,
+            48
+          ]
+        },
+        {
+          "technique": "confinement",
+          "source": {
+            "kind": "column",
+            "index": 3
+          },
+          "target": {
+            "kind": "region",
+            "index": 7
+          },
+          "eliminated": [
+            50,
+            56,
+            57,
+            58
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "column",
+            "index": 0
+          },
+          "cell": 24,
+          "eliminated": [
+            25
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "column",
+            "index": 2
+          },
+          "cell": 10,
+          "eliminated": [
+            9
+          ]
+        },
+        {
+          "technique": "adjacency",
+          "source": {
+            "kind": "row",
+            "index": 7
+          },
+          "eliminated": [
+            51,
+            52
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "row",
+            "index": 6
+          },
+          "cell": 49,
+          "eliminated": [
+            41
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "row",
+            "index": 5
+          },
+          "cell": 44,
+          "eliminated": [
+            60
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "row",
+            "index": 7
+          },
+          "cell": 59,
+          "eliminated": []
+        }
+      ]
+    },
+    {
+      "id": "regions-v1-8-72656708-37",
+      "size": 8,
+      "regions": [
+        0,
+        1,
+        1,
+        2,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        3,
+        1,
+        1,
+        1,
+        1,
+        1,
+        3,
+        3,
+        3,
+        3,
+        4,
+        4,
+        5,
+        1,
+        1,
+        3,
+        3,
+        6,
+        4,
+        4,
+        5,
+        1,
+        1,
+        3,
+        3,
+        6,
+        4,
+        4,
+        4,
+        4,
+        1,
+        7,
+        3,
+        6,
+        4,
+        4,
+        4,
+        4,
+        4,
+        3,
+        3,
+        6
+      ],
+      "attempt": 37,
+      "difficulty": "medium",
+      "solution": [
+        3,
+        0,
+        4,
+        6,
+        2,
+        7,
+        5,
+        1
+      ],
+      "trace": [
+        {
+          "technique": "single",
+          "house": {
+            "kind": "region",
+            "index": 2
+          },
+          "cell": 3,
+          "eliminated": [
+            0,
+            1,
+            2,
+            4,
+            5,
+            6,
+            7,
+            10,
+            11,
+            12,
+            19,
+            27,
+            35,
+            43,
+            51,
+            59
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "region",
+            "index": 0
+          },
+          "cell": 8,
+          "eliminated": [
+            9,
+            13,
+            14,
+            15,
+            16,
+            17,
+            24,
+            32,
+            40,
+            48,
+            56
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "region",
+            "index": 7
+          },
+          "cell": 53,
+          "eliminated": [
+            21,
+            29,
+            37,
+            44,
+            45,
+            46,
+            49,
+            50,
+            52,
+            54,
+            55,
+            60,
+            61,
+            62
+          ]
+        },
+        {
+          "technique": "confinement",
+          "source": {
+            "kind": "column",
+            "index": 6
+          },
+          "target": {
+            "kind": "region",
+            "index": 3
+          },
+          "eliminated": [
+            28,
+            31
+          ]
+        },
+        {
+          "technique": "confinement",
+          "source": {
+            "kind": "column",
+            "index": 4
+          },
+          "target": {
+            "kind": "region",
+            "index": 1
+          },
+          "eliminated": [
+            18,
+            23,
+            25,
+            26
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "row",
+            "index": 3
+          },
+          "cell": 30,
+          "eliminated": [
+            22,
+            38,
+            39
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "row",
+            "index": 2
+          },
+          "cell": 20,
+          "eliminated": [
+            36
+          ]
+        },
+        {
+          "technique": "confinement",
+          "source": {
+            "kind": "column",
+            "index": 1
+          },
+          "target": {
+            "kind": "region",
+            "index": 4
+          },
+          "eliminated": [
+            58
+          ]
+        },
+        {
+          "technique": "adjacency",
+          "source": {
+            "kind": "row",
+            "index": 4
+          },
+          "eliminated": [
+            41,
+            42
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "row",
+            "index": 5
+          },
+          "cell": 47,
+          "eliminated": [
+            63
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "row",
+            "index": 7
+          },
+          "cell": 57,
+          "eliminated": [
+            33
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "row",
+            "index": 4
+          },
+          "cell": 34,
+          "eliminated": []
+        }
+      ]
+    },
+    {
+      "id": "regions-v1-8-72656708-597",
+      "size": 8,
+      "regions": [
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        2,
+        2,
+        3,
+        4,
+        4,
+        2,
+        2,
+        0,
+        2,
+        2,
+        3,
+        3,
+        3,
+        5,
+        2,
+        2,
+        2,
+        2,
+        3,
+        3,
+        3,
+        5,
+        2,
+        2,
+        2,
+        2,
+        3,
+        5,
+        5,
+        5,
+        2,
+        2,
+        2,
+        6,
+        3,
+        5,
+        5,
+        2,
+        2,
+        2,
+        2,
+        6,
+        7,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2,
+        2
+      ],
+      "attempt": 597,
+      "difficulty": "hard",
+      "solution": [
+        6,
+        4,
+        2,
+        5,
+        1,
+        3,
+        7,
+        0
+      ],
+      "trace": [
+        {
+          "technique": "single",
+          "house": {
+            "kind": "region",
+            "index": 7
+          },
+          "cell": 56,
+          "eliminated": [
+            0,
+            8,
+            16,
+            24,
+            32,
+            40,
+            48,
+            49,
+            57,
+            58,
+            59,
+            60,
+            61,
+            62,
+            63
+          ]
+        },
+        {
+          "technique": "confinement",
+          "source": {
+            "kind": "region",
+            "index": 1
+          },
+          "target": {
+            "kind": "row",
+            "index": 0
+          },
+          "eliminated": [
+            1,
+            2
+          ]
+        },
+        {
+          "technique": "confinement",
+          "source": {
+            "kind": "region",
+            "index": 4
+          },
+          "target": {
+            "kind": "row",
+            "index": 2
+          },
+          "eliminated": [
+            19,
+            20,
+            21,
+            22,
+            23
+          ]
+        },
+        {
+          "technique": "confinement",
+          "source": {
+            "kind": "region",
+            "index": 0
+          },
+          "target": {
+            "kind": "row",
+            "index": 1
+          },
+          "eliminated": [
+            14,
+            15
+          ]
+        },
+        {
+          "technique": "confinement",
+          "source": {
+            "kind": "region",
+            "index": 6
+          },
+          "target": {
+            "kind": "column",
+            "index": 7
+          },
+          "eliminated": [
+            7,
+            31,
+            39
+          ]
+        },
+        {
+          "technique": "adjacency",
+          "source": {
+            "kind": "row",
+            "index": 2
+          },
+          "eliminated": [
+            9,
+            10,
+            25,
+            26
+          ]
+        },
+        {
+          "technique": "confinement",
+          "source": {
+            "kind": "region",
+            "index": 3
+          },
+          "target": {
+            "kind": "row",
+            "index": 4
+          },
+          "eliminated": [
+            35,
+            36,
+            37,
+            38
+          ]
+        },
+        {
+          "technique": "adjacency",
+          "source": {
+            "kind": "row",
+            "index": 1
+          },
+          "eliminated": [
+            4
+          ]
+        },
+        {
+          "technique": "adjacency",
+          "source": {
+            "kind": "row",
+            "index": 4
+          },
+          "eliminated": [
+            41,
+            42
+          ]
+        },
+        {
+          "technique": "adjacency",
+          "source": {
+            "kind": "column",
+            "index": 7
+          },
+          "eliminated": [
+            46,
+            54
+          ]
+        },
+        {
+          "technique": "pair",
+          "sources": [
+            {
+              "kind": "row",
+              "index": 2
+            },
+            {
+              "kind": "row",
+              "index": 4
+            }
+          ],
+          "targets": [
+            {
+              "kind": "column",
+              "index": 1
+            },
+            {
+              "kind": "column",
+              "index": 2
+            }
+          ],
+          "eliminated": [
+            50
+          ]
+        },
+        {
+          "technique": "confinement",
+          "source": {
+            "kind": "region",
+            "index": 5
+          },
+          "target": {
+            "kind": "column",
+            "index": 3
+          },
+          "eliminated": [
+            3,
+            11,
+            51
+          ]
+        },
+        {
+          "technique": "adjacency",
+          "source": {
+            "kind": "row",
+            "index": 0
+          },
+          "eliminated": [
+            13
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "row",
+            "index": 1
+          },
+          "cell": 12,
+          "eliminated": [
+            5,
+            28,
+            44,
+            52
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "row",
+            "index": 0
+          },
+          "cell": 6,
+          "eliminated": [
+            30
+          ]
+        },
+        {
+          "technique": "adjacency",
+          "source": {
+            "kind": "column",
+            "index": 2
+          },
+          "eliminated": [
+            27
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "row",
+            "index": 3
+          },
+          "cell": 29,
+          "eliminated": [
+            45,
+            53
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "row",
+            "index": 6
+          },
+          "cell": 55,
+          "eliminated": [
+            47
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "row",
+            "index": 5
+          },
+          "cell": 43,
+          "eliminated": [
+            34
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "row",
+            "index": 4
+          },
+          "cell": 33,
+          "eliminated": [
+            17
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "row",
+            "index": 2
+          },
+          "cell": 18,
+          "eliminated": []
+        }
+      ]
+    },
+    {
+      "id": "regions-v1-8-72656708-2564",
+      "size": 8,
+      "regions": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        0,
+        2,
+        2,
+        2,
+        1,
+        1,
+        1,
+        1,
+        2,
+        2,
+        2,
+        1,
+        1,
+        1,
+        1,
+        1,
+        2,
+        2,
+        2,
+        3,
+        4,
+        4,
+        4,
+        4,
+        2,
+        2,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        5,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        6,
+        5,
+        4,
+        4,
+        4,
+        7,
+        7,
+        4,
+        4,
+        5,
+        4,
+        4,
+        4,
+        4,
+        7,
+        4,
+        4
+      ],
+      "attempt": 2564,
+      "difficulty": "hard",
+      "solution": [
+        2,
+        6,
+        1,
+        3,
+        5,
+        7,
+        4,
+        0
+      ],
+      "trace": [
+        {
+          "technique": "single",
+          "house": {
+            "kind": "region",
+            "index": 3
+          },
+          "cell": 27,
+          "eliminated": [
+            3,
+            11,
+            18,
+            19,
+            20,
+            24,
+            25,
+            26,
+            28,
+            29,
+            30,
+            31,
+            34,
+            35,
+            36,
+            43,
+            51,
+            59
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "region",
+            "index": 6
+          },
+          "cell": 47,
+          "eliminated": [
+            7,
+            15,
+            23,
+            38,
+            39,
+            40,
+            41,
+            42,
+            44,
+            45,
+            46,
+            54,
+            55,
+            63
+          ]
+        },
+        {
+          "technique": "confinement",
+          "source": {
+            "kind": "region",
+            "index": 5
+          },
+          "target": {
+            "kind": "column",
+            "index": 0
+          },
+          "eliminated": [
+            0,
+            8,
+            16,
+            32
+          ]
+        },
+        {
+          "technique": "confinement",
+          "source": {
+            "kind": "region",
+            "index": 0
+          },
+          "target": {
+            "kind": "row",
+            "index": 0
+          },
+          "eliminated": [
+            5,
+            6
+          ]
+        },
+        {
+          "technique": "adjacency",
+          "source": {
+            "kind": "column",
+            "index": 0
+          },
+          "eliminated": [
+            49,
+            57
+          ]
+        },
+        {
+          "technique": "adjacency",
+          "source": {
+            "kind": "region",
+            "index": 7
+          },
+          "eliminated": [
+            60
+          ]
+        },
+        {
+          "technique": "pair",
+          "sources": [
+            {
+              "kind": "row",
+              "index": 1
+            },
+            {
+              "kind": "row",
+              "index": 2
+            }
+          ],
+          "targets": [
+            {
+              "kind": "region",
+              "index": 1
+            },
+            {
+              "kind": "region",
+              "index": 2
+            }
+          ],
+          "eliminated": [
+            33
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "row",
+            "index": 4
+          },
+          "cell": 37,
+          "eliminated": [
+            13,
+            21,
+            50,
+            53,
+            58,
+            61,
+            62
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "row",
+            "index": 7
+          },
+          "cell": 56,
+          "eliminated": [
+            48
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "row",
+            "index": 6
+          },
+          "cell": 52,
+          "eliminated": [
+            4,
+            12
+          ]
+        },
+        {
+          "technique": "adjacency",
+          "source": {
+            "kind": "row",
+            "index": 0
+          },
+          "eliminated": [
+            9,
+            10
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "row",
+            "index": 1
+          },
+          "cell": 14,
+          "eliminated": [
+            22
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "row",
+            "index": 2
+          },
+          "cell": 17,
+          "eliminated": [
+            1
+          ]
+        },
+        {
+          "technique": "single",
+          "house": {
+            "kind": "row",
+            "index": 0
+          },
+          "cell": 2,
+          "eliminated": []
+        }
+      ]
+    }
+  ]
+}
